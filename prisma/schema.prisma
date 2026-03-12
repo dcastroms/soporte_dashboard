@@ -1,0 +1,261 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  email         String    @unique
+  password      String?
+  name          String?
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  calendarSettings CalendarSettings?
+  createdAt     DateTime  @default(now())
+  role          String    @default("USER") // ADMIN, USER
+  notifications Notification[]
+}
+
+model CalendarSettings {
+  id               String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String  @unique @db.ObjectId
+  targetCalendarId String  @default("primary")
+  autoSync         Boolean @default(false)
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.String
+  access_token      String? @db.String
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.String
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Goal {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  objective   String
+  quarter     String   // Q1, Q2, Q3, Q4
+  initiatives Initiative[]
+}
+
+model Initiative {
+  id          String @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  status      String // Pendiente, En Progreso, Completado
+  goalId      String @db.ObjectId
+  goal        Goal   @relation(fields: [goalId], references: [id])
+}
+
+model WeeklyUpdate {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  week      Int
+  quarter   String
+  done      String[]
+  improved  String[]
+  pending   String[]
+  blockers  String[]
+  createdAt DateTime @default(now())
+}
+
+model BacklogItem {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  title     String
+  type      String // Proceso, Bug, Automatización, Documentación
+  assignee  String
+  priority  String // Baja, Media, Alta, Crítica
+  status    String // Pendiente, En Progreso, Completado
+  createdAt DateTime @default(now())
+}
+
+model TeamLog {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  date      String
+  shift     String // Mañana, Tarde, Noche
+  person    String
+  event     String
+  type      String // Incidente, Tarea, Aprendizaje
+  createdAt DateTime @default(now())
+}
+
+model Automation {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  process   String
+  status    String // Activa, En Progreso, Idea
+  impact    String
+  createdAt DateTime @default(now())
+}
+
+model IntercomConversation {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  intercomId     String   @unique
+  subject        String?
+  status         String
+  createdAt      DateTime
+  updatedAt      DateTime
+  teammateId     String?
+  teammateName   String?
+  tags           String[]
+  priority       String?
+  firstResponseTime Int?  // in seconds
+  client         String?
+  ticketType     String?
+  module         String?
+}
+
+model IntercomMetric {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  date        DateTime @unique
+  totalVolume Int
+  avgFirstResponseTime Float?
+  medianResponseTime   Float?
+  closedCount Int
+  csatAverage Float?
+}
+
+model IntercomCategoryMetric {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  date      DateTime
+  category  String   // "Client", "Module", "Type"
+  value     String
+  count     Int
+
+  @@unique([date, category, value])
+}
+
+model IntercomHeatmap {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  dayOfWeek Int      // 0-6
+  hour      Int      // 0-23
+  count     Int      @default(0)
+
+  @@unique([dayOfWeek, hour])
+}
+
+model IntercomAgent {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  intercomId   String   @unique
+  name         String
+  totalSolved  Int      @default(0)
+  avgResponseTime Float?
+  csatScore    Float?
+}
+
+model IntercomSyncStatus {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  lastSync  DateTime @default(now())
+}
+
+model SupportAssignment {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  date          String   // Formato YYYY-MM-DD
+  hour          Int      // 0 to 23
+  agentName     String
+  googleEventId String?
+  createdAt     DateTime @default(now())
+
+  @@unique([date, hour, agentName])
+}
+
+model ShiftHandover {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  date          String   // YYYY-MM-DD
+  shiftType     String   // Mañana, Tarde, Noche
+  startHour     Int?     // Hora de inicio del bloque (0-23)
+  endHour       Int?     // Hora de fin del bloque (0-23)
+  agentName     String   // Quien entrega
+  receiverName  String   // Quien recibe
+  pendings      String   // Tickets o tareas pendientes
+  incidents     String   // Incidentes relevantes
+  generalStatus String   // Verde, Amarillo, Rojo
+  details       String?  // Detalles adicionales
+  createdAt     DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  title     String
+  message   String
+  type      String   // info, success, warning, error
+  read      Boolean  @default(false)
+  link      String?  // Optional link to a page
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String?  @db.ObjectId
+  userName  String
+  action    String   // Created, Updated, Deleted, Completed
+  target    String   // Shift, Backlog, Handover, Goal
+  details   String
+  createdAt DateTime @default(now())
+}
+
+model Event {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  type        String   // 'Maintenance', 'Promotion', 'Launch', 'Meeting'
+  notifySlack Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  createdBy   String?
+}
+
+model ClientNote {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  clientId  String   // slug/name of the client
+  content   String
+  authorId  String?  @db.ObjectId
+  authorName String
+  createdAt DateTime @default(now())
+}
+
+model ClientActionLog {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  clientId  String
+  action    String   // 'Reassigned', 'Closed', 'Escalated', etc.
+  details   String
+  authorName String
+  timestamp DateTime @default(now())
+}
