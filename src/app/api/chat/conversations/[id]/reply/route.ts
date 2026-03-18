@@ -31,11 +31,13 @@ export async function POST(
   }
 
   const { id } = await params;
-  const { body } = await req.json();
+  const { body, messageType } = await req.json();
 
   if (!body || typeof body !== "string" || !body.trim()) {
     return NextResponse.json({ error: "Empty message" }, { status: 400 });
   }
+
+  const type = messageType === "note" ? "note" : "comment";
 
   const adminId = await getAdminIdByEmail(session.user.email);
   if (!adminId) {
@@ -51,7 +53,7 @@ export async function POST(
     body: JSON.stringify({
       type: "admin",
       admin_id: adminId,
-      message_type: "comment",
+      message_type: type,
       body: body.trim(),
     }),
   });

@@ -643,6 +643,7 @@ export async function getConversationDetail(id: string): Promise<import("@/types
         authorType: c.source.author?.type === "admin" ? "admin" : "user",
         body: c.source.body || "",
         createdAt: c.created_at ? new Date(c.created_at * 1000).toISOString() : "",
+        isNote: false,
       });
     }
 
@@ -656,6 +657,7 @@ export async function getConversationDetail(id: string): Promise<import("@/types
           part.author?.type === "admin" ? "admin" : part.author?.type === "bot" ? "bot" : "user",
         body: part.body,
         createdAt: part.created_at ? new Date(part.created_at * 1000).toISOString() : "",
+        isNote: part.part_type === "note",
       });
     }
 

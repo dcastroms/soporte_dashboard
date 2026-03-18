@@ -17,6 +17,7 @@ export interface ChatMessage {
   authorType: "user" | "admin" | "bot";
   body: string; // HTML string from Intercom
   createdAt: string;
+  isNote: boolean;
 }
 
 export interface ChatConversationDetail extends ChatConversation {
