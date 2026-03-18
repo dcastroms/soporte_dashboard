@@ -13,25 +13,14 @@ const HEADERS = {
   "Intercom-Version": "2.11"
 };
 
-console.log("INTERCOM LIB LOADED");
 
 /**
  * Sincroniza datos reales de Intercom si el TOKEN existe.
  */
 export async function syncIntercomData(force = false) {
   if (!INTERCOM_TOKEN) return;
-  console.log("Syncing Intercom data...");
-  console.log("DATABASE_URL detected:", process.env.DATABASE_URL ? "YES" : "NO");
-  console.log("------------------------");
-  
-  if (!INTERCOM_TOKEN) {
-    console.log("No Intercom Token found. Using mock data for sync.");
-    return await generateMockIntercomData();
-  }
 
   try {
-    console.log("Starting real Intercom synchronization...");
-
     // 1. Obtener todos los admins para mapear IDs a nombres
     const adminsResp = await fetch(`${INTERCOM_API_URL}/admins`, { headers: HEADERS });
     const adminsData = await adminsResp.json();
@@ -42,14 +31,7 @@ export async function syncIntercomData(force = false) {
       });
     }
 
-    // 2. Fresh Sync (Borrado total solicitado para actualizar mapeo)
-    console.log("Forcing fresh sync with new mappings...");
-    await prisma.intercomConversation.deleteMany({});
-    await prisma.intercomMetric.deleteMany({});
-    await prisma.intercomCategoryMetric.deleteMany({});
-    await prisma.intercomAgent.deleteMany({});
-    await prisma.intercomHeatmap.deleteMany({});
-    
+    // 2. Fetch conversations
     const syncWindowDays = 30;
     const windowAgo = Math.floor(Date.now() / 1000) - (syncWindowDays * 24 * 60 * 60);
     
@@ -76,24 +58,6 @@ export async function syncIntercomData(force = false) {
 
     const conversationsData = await conversationsResp.json();
     const conversations = conversationsData.conversations || [];
-
-    if (conversations.length > 0) {
-      const allKeys = new Set();
-      conversations.slice(0, 50).forEach((c: any) => {
-        if (c.custom_attributes) {
-          Object.keys(c.custom_attributes).forEach(k => allKeys.add(k));
-        }
-      });
-      console.log("--- ALL DETECTED CUSTOM ATTRIBUTE KEYS ---");
-      console.log(Array.from(allKeys));
-      console.log("------------------------------------------");
-      
-      // También logueamos una que sí tenga datos para ver el formato
-      const sampleWithData = conversations.find((c: any) => Object.keys(c.custom_attributes || {}).length > 5);
-      if (sampleWithData) {
-        console.log("Sample with data:", sampleWithData.custom_attributes);
-      }
-    }
 
     // 3. Procesar datos para agregados y persistencia individual
     const dailyMetrics: Record<string, any> = {};
@@ -204,67 +168,61 @@ export async function syncIntercomData(force = false) {
       };
     });
 
-    // 4. Guardar en Base de Datos (Operaciones Masivas)
-    
-    // Guardar Conversaciones (En esta vuelta hacemos fresh sync total)
-    await prisma.intercomConversation.createMany({ data: conversationsToSave });
-
-    // Limpiar heatmap para refrescar con datos reales
-    await prisma.intercomHeatmap.deleteMany({});
-    const heatmapInsert = [];
+    // 4. Guardar en Base de Datos en una transacción atómica
+    // Si cualquier operación falla, se hace rollback completo (requiere replica set en MongoDB Atlas)
+    const heatmapInsert: { dayOfWeek: number; hour: number; count: number }[] = [];
     for (let day = 0; day < 7; day++) {
-        for (let hour = 0; hour < 24; hour++) {
-            heatmapInsert.push({ dayOfWeek: day, hour: hour, count: heatmapData[`${day}-${hour}`] || 0 });
-        }
+      for (let hour = 0; hour < 24; hour++) {
+        heatmapInsert.push({ dayOfWeek: day, hour: hour, count: heatmapData[`${day}-${hour}`] || 0 });
+      }
     }
-    await prisma.intercomHeatmap.createMany({ data: heatmapInsert });
 
-    // Guardar Métricas Diarias (Refrescamos solo los días que han tenido actividad)
     const activeDates = Object.keys(dailyMetrics).map(d => new Date(d));
-    await prisma.intercomMetric.deleteMany({
-        where: { date: { in: activeDates } }
-    });
     const metricsInsert = Object.entries(dailyMetrics).map(([date, m]) => ({
-        date: new Date(date),
-        totalVolume: m.totalVolume,
-        avgFirstResponseTime: m.frtCount > 0 ? m.totalFRT / m.frtCount : null,
-        closedCount: m.closedCount,
-        csatAverage: m.csatCount > 0 ? parseFloat((m.totalCSAT / m.csatCount).toFixed(2)) : null,
-        // Agregamos resolution time si el esquema lo permite (asumimos que sí o lo ignoramos si falla)
-        // medianResponseTime: m.resolutionCount > 0 ? m.totalResolutionTime / m.resolutionCount : null,
+      date: new Date(date),
+      totalVolume: m.totalVolume,
+      avgFirstResponseTime: m.frtCount > 0 ? m.totalFRT / m.frtCount : null,
+      closedCount: m.closedCount,
+      csatAverage: m.csatCount > 0 ? parseFloat((m.totalCSAT / m.csatCount).toFixed(2)) : null,
     }));
-    await prisma.intercomMetric.createMany({ data: metricsInsert });
 
-    // Guardar Métricas por Categoría
-    await prisma.intercomCategoryMetric.deleteMany({});
     const categoryInsert: any[] = [];
     Object.entries(categoryStats).forEach(([category, values]) => {
       Object.entries(values).forEach(([value, count]) => {
-        categoryInsert.push({
-          date: new Date(), // Agregado actual
-          category,
-          value,
-          count
-        });
+        categoryInsert.push({ date: new Date(), category, value, count });
       });
     });
-    if (categoryInsert.length > 0) {
-      await prisma.intercomCategoryMetric.createMany({ data: categoryInsert });
-    }
 
-    // Guardar Agentes
-    await prisma.intercomAgent.deleteMany({});
     const agentsInsert = Object.entries(agentStats).map(([id, s]) => ({
-        intercomId: id,
-        name: adminMap[id] || `Agente ${id}`,
-        totalSolved: s.totalSolved,
-        avgResponseTime: s.rtCount > 0 ? s.totalRT / s.rtCount : null,
-        csatScore: s.csatCount > 0 ? parseFloat((s.totalCSAT / s.csatCount).toFixed(2)) : null
+      intercomId: id,
+      name: adminMap[id] || `Agente ${id}`,
+      totalSolved: s.totalSolved,
+      avgResponseTime: s.rtCount > 0 ? s.totalRT / s.rtCount : null,
+      csatScore: s.csatCount > 0 ? parseFloat((s.totalCSAT / s.csatCount).toFixed(2)) : null
     }));
-    await prisma.intercomAgent.createMany({ data: agentsInsert });
 
-    // Actualizar Status de Sync
-    await prisma.intercomSyncStatus.create({ data: { lastSync: new Date() } });
+    await prisma.$transaction(async (tx) => {
+      // Borrar todo primero (dentro de la transacción — si algo falla, se revierte)
+      await tx.intercomConversation.deleteMany({});
+      await tx.intercomMetric.deleteMany({});
+      await tx.intercomCategoryMetric.deleteMany({});
+      await tx.intercomAgent.deleteMany({});
+      await tx.intercomHeatmap.deleteMany({});
+
+      // Insertar datos nuevos
+      await tx.intercomConversation.createMany({ data: conversationsToSave });
+      await tx.intercomHeatmap.createMany({ data: heatmapInsert });
+      if (metricsInsert.length > 0) {
+        await tx.intercomMetric.createMany({ data: metricsInsert });
+      }
+      if (categoryInsert.length > 0) {
+        await tx.intercomCategoryMetric.createMany({ data: categoryInsert });
+      }
+      if (agentsInsert.length > 0) {
+        await tx.intercomAgent.createMany({ data: agentsInsert });
+      }
+      await tx.intercomSyncStatus.create({ data: { lastSync: new Date() } });
+    });
 
     revalidatePath('/reports');
     revalidatePath('/');
@@ -635,5 +593,89 @@ export async function getAllOpenConversations() {
   } catch (error) {
     console.error("Error fetching open tickets", error);
     return [];
+  }
+}
+
+export async function getConversationDetail(id: string): Promise<import("@/types/chat").ChatConversationDetail | null> {
+  if (!INTERCOM_TOKEN) return null;
+
+  try {
+    const resp = await fetch(`${INTERCOM_API_URL}/conversations/${id}`, {
+      headers: HEADERS,
+    });
+    if (!resp.ok) return null;
+    const c = await resp.json();
+
+    // Subject
+    let subject = (c.source?.subject || "").replace(/<[^>]*>?/gm, "").trim();
+    if (!subject) {
+      const author = c.source?.author;
+      const snippet = (c.source?.body || "").replace(/<[^>]*>?/gm, "").substring(0, 50);
+      subject = snippet ? `${author?.name || "Usuario"}: ${snippet}...` : `Ticket de ${author?.name || "Usuario"}`;
+    }
+
+    // Admins map
+    const adminMap: Record<string, string> = {};
+    try {
+      const adminsResp = await fetch(`${INTERCOM_API_URL}/admins`, { headers: HEADERS });
+      if (adminsResp.ok) {
+        const adminsData = await adminsResp.json();
+        (adminsData.admins || []).forEach((a: { id: string; name?: string; email?: string }) => {
+          adminMap[a.id] = a.name || a.email || "";
+        });
+      }
+    } catch {}
+
+    const attrs = c.custom_attributes || {};
+    const client = attrs["Clientes"] || attrs["Client"] || attrs["Cliente"] || null;
+    const tags: string[] = (c.tags?.tags || []).map((t: { name: string }) => t.name);
+    const isVip =
+      tags.some((t) => ["vip", "enterprise", "priority", "VIP", "Enterprise"].includes(t)) ||
+      c.priority === "priority";
+
+    // Build message list from source + conversation_parts
+    const messages: import("@/types/chat").ChatMessage[] = [];
+
+    if (c.source) {
+      messages.push({
+        id: c.source.id || "source",
+        author: c.source.author?.name || c.source.author?.email || "Usuario",
+        authorType: c.source.author?.type === "admin" ? "admin" : "user",
+        body: c.source.body || "",
+        createdAt: c.created_at ? new Date(c.created_at * 1000).toISOString() : "",
+      });
+    }
+
+    const parts: { id: string; body: string; part_type: string; author?: { name?: string; email?: string; type?: string }; created_at?: number }[] = c.conversation_parts?.conversation_parts || [];
+    for (const part of parts) {
+      if (!part.body || part.part_type === "close" || part.part_type === "open") continue;
+      messages.push({
+        id: part.id,
+        author: part.author?.name || part.author?.email || "Sistema",
+        authorType:
+          part.author?.type === "admin" ? "admin" : part.author?.type === "bot" ? "bot" : "user",
+        body: part.body,
+        createdAt: part.created_at ? new Date(part.created_at * 1000).toISOString() : "",
+      });
+    }
+
+    return {
+      id: c.id,
+      subject,
+      assignee: c.admin_assignee_id
+        ? adminMap[c.admin_assignee_id] || "Agente Desconocido"
+        : "Sin asignar",
+      client,
+      tags,
+      isVip,
+      priority: c.priority || null,
+      createdAt: c.created_at ? new Date(c.created_at * 1000).toISOString() : null,
+      updatedAt: c.updated_at ? new Date(c.updated_at * 1000).toISOString() : null,
+      url: `https://app.intercom.com/a/inbox/here/inbox/conversation/${c.id}`,
+      messages,
+    };
+  } catch (error) {
+    console.error("Error fetching conversation detail", error);
+    return null;
   }
 }
