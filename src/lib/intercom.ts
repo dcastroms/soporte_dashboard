@@ -647,17 +647,23 @@ export async function getConversationDetail(id: string): Promise<import("@/types
       });
     }
 
-    const parts: { id: string; body: string; part_type: string; author?: { name?: string; email?: string; type?: string }; created_at?: number }[] = c.conversation_parts?.conversation_parts || [];
+    const parts: { id: string; body: string; part_type: string; author?: { name?: string; email?: string; type?: string }; created_at?: number; attachments?: { url: string; name: string; content_type?: string; filesize?: number }[] }[] = c.conversation_parts?.conversation_parts || [];
     for (const part of parts) {
-      if (!part.body || part.part_type === "close" || part.part_type === "open") continue;
+      if ((!part.body && !part.attachments?.length) || part.part_type === "close" || part.part_type === "open") continue;
       messages.push({
         id: part.id,
         author: part.author?.name || part.author?.email || "Sistema",
         authorType:
           part.author?.type === "admin" ? "admin" : part.author?.type === "bot" ? "bot" : "user",
-        body: part.body,
+        body: part.body || "",
         createdAt: part.created_at ? new Date(part.created_at * 1000).toISOString() : "",
         isNote: part.part_type === "note",
+        attachments: (part.attachments || []).map((a) => ({
+          url: a.url,
+          name: a.name,
+          contentType: a.content_type,
+          fileSize: a.filesize,
+        })),
       });
     }
 
@@ -675,9 +681,48 @@ export async function getConversationDetail(id: string): Promise<import("@/types
       updatedAt: c.updated_at ? new Date(c.updated_at * 1000).toISOString() : null,
       url: `https://app.intercom.com/a/inbox/here/inbox/conversation/${c.id}`,
       messages,
+      sourceType: c.source?.type || null,
     };
   } catch (error) {
     console.error("Error fetching conversation detail", error);
     return null;
   }
+}
+
+/**
+ * Busca conversaciones cerradas (resueltas) en un rango de fechas.
+ * Usa el endpoint POST /conversations/search de Intercom API v2.11.
+ * Retorna array de IDs de conversación para procesar en batch.
+ */
+export async function searchClosedConversations(
+  from: Date,
+  to: Date,
+  page = 1
+): Promise<{ ids: string[]; totalPages: number }> {
+  if (!INTERCOM_TOKEN) return { ids: [], totalPages: 0 };
+
+  const resp = await fetch(`${INTERCOM_API_URL}/conversations/search`, {
+    method: "POST",
+    headers: { ...HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query: {
+        operator: "AND",
+        value: [
+          { field: "state", operator: "=", value: "resolved" },
+          { field: "updated_at", operator: ">", value: Math.floor(from.getTime() / 1000) },
+          { field: "updated_at", operator: "<", value: Math.floor(to.getTime() / 1000) },
+        ],
+      },
+      pagination: { per_page: 20, page },
+    }),
+  });
+
+  if (!resp.ok) return { ids: [], totalPages: 0 };
+
+  const data = await resp.json();
+  const ids: string[] = (data.conversations || []).map((c: { id: string }) => c.id);
+  const total = data.total_count || 0;
+  const totalPages = Math.ceil(total / 20);
+
+  return { ids, totalPages };
 }
