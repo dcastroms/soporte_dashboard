@@ -33,6 +33,24 @@ export function ConversationThread({ conversationId }: Props) {
     fetchDetail();
   }, [fetchDetail]);
 
+  // Re-fetch when a ticket_updated SSE event matches this conversation
+  useEffect(() => {
+    if (!conversationId) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ id: string }>).detail;
+      if (detail?.id === conversationId) fetchDetail();
+    };
+    window.addEventListener("live:ticket_updated", handler);
+    return () => window.removeEventListener("live:ticket_updated", handler);
+  }, [conversationId, fetchDetail]);
+
+  // Polling fallback: refresh every 15s while a conversation is open
+  useEffect(() => {
+    if (!conversationId) return;
+    const interval = setInterval(fetchDetail, 15_000);
+    return () => clearInterval(interval);
+  }, [conversationId, fetchDetail]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [detail?.messages.length]);
