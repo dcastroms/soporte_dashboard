@@ -75,13 +75,32 @@ ${conversation}`,
   const response = await chat(messages, { maxTokens: 2048 });
   const raw = response.text.trim();
 
+  function sanitizeJson(text: string): string {
+    // Strip markdown code fences
+    let s = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+    // Extract first JSON object
+    const match = s.match(/\{[\s\S]*\}/);
+    if (!match) return s;
+    s = match[0];
+    // Fix invalid escape sequences (\X where X is not a valid JSON escape char)
+    s = s.replace(/\\([^"\\/bfnrtu])/g, "\\\\$1");
+    return s;
+  }
+
   let draft: ArticleDraft;
   try {
-    draft = JSON.parse(raw);
+    draft = JSON.parse(sanitizeJson(raw));
   } catch {
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("La IA no retornó JSON válido");
-    draft = JSON.parse(match[0]);
+    // Retry with shorter conversation (truncate to 3000 chars)
+    const shortConversation = conversation.slice(-3000);
+    messages[1].content = messages[1].content.replace(conversation, shortConversation);
+    const retry = await chat(messages, { maxTokens: 2048 });
+    const retryRaw = retry.text.trim();
+    try {
+      draft = JSON.parse(sanitizeJson(retryRaw));
+    } catch {
+      throw new Error("La IA no retornó JSON válido tras dos intentos");
+    }
   }
 
   if (!draft.titulo || !draft.problema || !Array.isArray(draft.solucion)) {
