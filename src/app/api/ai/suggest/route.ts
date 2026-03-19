@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { chat } from "@/lib/aiProvider";
 import { buildSuggestMessages } from "@/lib/supportPrompt";
-import { embed, findTopChunks } from "@/lib/embeddings";
+import { embedQuery, findTopChunks } from "@/lib/embeddings";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit } from "@/lib/rateLimit";
 
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (allChunks.length > 0) {
-        const queryEmbedding = await embed(lastUserMsg.content);
+        const queryEmbedding = await embedQuery(lastUserMsg.content);
         const topChunks = findTopChunks(queryEmbedding, allChunks);
         console.log(`[RAG] query="${lastUserMsg.content.slice(0, 60)}" chunks=${allChunks.length} found=${topChunks.length}`);
         if (topChunks.length > 0) {
