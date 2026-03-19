@@ -6,7 +6,6 @@ import { prisma } from '@/lib/prisma';
 export async function GET(req: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
-        
         if (!session || (session.user as any)?.role !== 'ADMIN') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
         }
@@ -17,11 +16,10 @@ export async function GET(req: NextRequest) {
                 name: true,
                 email: true,
                 role: true,
+                permissions: true,
                 createdAt: true,
             },
-            orderBy: {
-                createdAt: 'desc'
-            }
+            orderBy: { createdAt: 'desc' }
         });
 
         return NextResponse.json(users);
@@ -34,25 +32,32 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
     try {
         const session = await getServerSession(authOptions);
-        
         if (!session || (session.user as any)?.role !== 'ADMIN') {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
         }
 
-        const { userId, role } = await req.json();
+        const body = await req.json();
+        const { userId, role, permissions } = body;
 
-        if (!userId || !role || !['ADMIN', 'USER'].includes(role)) {
-            return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+        if (!userId) return NextResponse.json({ error: 'userId requerido' }, { status: 400 });
+
+        const data: Record<string, unknown> = {};
+        if (role && ['ADMIN', 'USER'].includes(role)) data.role = role;
+        if (Array.isArray(permissions)) data.permissions = permissions;
+
+        if (Object.keys(data).length === 0) {
+            return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 });
         }
 
         const updatedUser = await prisma.user.update({
             where: { id: userId },
-            data: { role }
+            data,
+            select: { id: true, role: true, permissions: true },
         });
 
         return NextResponse.json(updatedUser);
     } catch (error) {
-        console.error('Error updating user role:', error);
+        console.error('Error updating user:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

@@ -19,6 +19,7 @@ model User {
   calendarSettings CalendarSettings?
   createdAt     DateTime  @default(now())
   role          String    @default("USER") // ADMIN, USER
+  permissions   String[]  @default([])     // allowed routes e.g. ["/", "/chat", "/reports"]
   notifications Notification[]
 }
 

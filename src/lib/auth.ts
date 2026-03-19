@@ -54,19 +54,22 @@ export const authOptions: NextAuthOptions = {
         if (token) {
           session.user.id = (token as any).sub as string;
           (session.user as any).role = (token as any).role as string;
+          (session.user as any).permissions = (token as any).permissions as string[] ?? [];
         } else if (user) {
           session.user.id = user.id;
           (session.user as any).role = (user as any).role as string;
+          (session.user as any).permissions = (user as any).permissions as string[] ?? [];
         }
       }
       return session;
     },
     async jwt({ token, user }) {
-        if (user) {
-            token.id = user.id;
-            token.role = (user as any).role; 
-        }
-        return token;
+      if (user) {
+        token.id = user.id;
+        token.role = (user as any).role;
+        token.permissions = (user as any).permissions ?? [];
+      }
+      return token;
     },
     async signIn({ user, account, profile }) {
       // Restricción de dominio @mediastre.am

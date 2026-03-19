@@ -18,7 +18,7 @@ export function AgentBenchmarking({ agents }: { agents: any[] }) {
             <CardContent>
                 <Table>
                     <TableHeader>
-                        <TableRow className="bg-slate-50 hover:bg-slate-50">
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
                             <TableHead>Agente</TableHead>
                             <TableHead className="text-right">Resueltos</TableHead>
                             <TableHead className="text-right">Respuesta Media</TableHead>
@@ -28,7 +28,7 @@ export function AgentBenchmarking({ agents }: { agents: any[] }) {
                     </TableHeader>
                     <TableBody>
                         {agents.map((agent) => (
-                            <TableRow key={agent.id} className="hover:bg-slate-50/50">
+                            <TableRow key={agent.id} className="hover:bg-muted/30">
                                 <TableCell className="font-semibold">{agent.name}</TableCell>
                                 <TableCell className="text-right">{agent.totalSolved}</TableCell>
                                 <TableCell className="text-right flex items-center justify-end gap-2">

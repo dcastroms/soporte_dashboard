@@ -94,6 +94,9 @@ export function Sidebar() {
     const pathname = usePathname();
     const { data: session } = useSession();
     const isAdmin = (session?.user as any)?.role === 'ADMIN';
+    const permissions: string[] = (session?.user as any)?.permissions ?? [];
+
+    const canSee = (href: string) => isAdmin || permissions.includes(href);
 
     return (
         <aside className="w-56 border-r border-sidebar-border bg-sidebar flex flex-col h-screen sticky top-0 transition-colors duration-200">
@@ -112,18 +115,22 @@ export function Sidebar() {
 
             {/* Navigation */}
             <nav className="flex-1 px-2 py-3 overflow-y-auto scrollbar-hide space-y-4">
-                {navSections.map((section) => (
-                    <div key={section.title}>
-                        <p className="px-2 mb-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-sidebar-foreground/35 select-none">
-                            {section.title}
-                        </p>
-                        <ul className="space-y-0.5">
-                            {section.items.map((item) => (
-                                <NavLink key={item.href} item={item} isActive={pathname === item.href} />
-                            ))}
-                        </ul>
-                    </div>
-                ))}
+                {navSections.map((section) => {
+                    const visibleItems = section.items.filter((item) => canSee(item.href));
+                    if (visibleItems.length === 0) return null;
+                    return (
+                        <div key={section.title}>
+                            <p className="px-2 mb-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-sidebar-foreground/35 select-none">
+                                {section.title}
+                            </p>
+                            <ul className="space-y-0.5">
+                                {visibleItems.map((item) => (
+                                    <NavLink key={item.href} item={item} isActive={pathname === item.href} />
+                                ))}
+                            </ul>
+                        </div>
+                    );
+                })}
 
                 {/* Admin section */}
                 {isAdmin && (

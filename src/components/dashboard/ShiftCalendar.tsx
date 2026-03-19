@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, ChevronRight, Upload, UserPlus, X } from "lucide-react";
+import { X, UserPlus } from "lucide-react";
 import { format, addDays, startOfWeek, eachDayOfInterval, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { UploadShiftsDialog } from './UploadShiftsDialog';
@@ -16,22 +16,25 @@ import { saveSupportAssignment, deleteSupportAssignment, getUsers } from '@/lib/
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { useSession, signIn } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { cn } from '@/lib/utils';
 
-const AGENT_COLORS: Record<string, string> = {
-    '#3b82f6': 'bg-blue-100 text-blue-700 border-blue-200',
-    '#10b981': 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    '#f59e0b': 'bg-amber-100 text-amber-700 border-amber-200',
-    '#8b5cf6': 'bg-violet-100 text-violet-700 border-violet-200',
-    '#ef4444': 'bg-red-100 text-red-700 border-red-200',
-    '#06b6d4': 'bg-cyan-100 text-cyan-700 border-cyan-200',
-    '#ec4899': 'bg-pink-100 text-pink-700 border-pink-200',
-    '#f97316': 'bg-orange-100 text-orange-700 border-orange-200',
+// Colores adaptados a dark/light mode usando variables CSS
+const AGENT_COLOR_CLASSES: Record<string, string> = {
+    '#3b82f6': 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30',
+    '#10b981': 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+    '#f59e0b': 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30',
+    '#8b5cf6': 'bg-violet-500/20 text-violet-600 dark:text-violet-400 border-violet-500/30',
+    '#ef4444': 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30',
+    '#06b6d4': 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border-cyan-500/30',
+    '#ec4899': 'bg-pink-500/20 text-pink-600 dark:text-pink-400 border-pink-500/30',
+    '#f97316': 'bg-orange-500/20 text-orange-600 dark:text-orange-400 border-orange-500/30',
 };
 
-const COLOR_PALETTE = Object.keys(AGENT_COLORS);
+const COLOR_PALETTE = Object.keys(AGENT_COLOR_CLASSES);
 
-const DEFAULT_AGENTS = ['Gabriel', 'Edwin', 'Arturo', 'Jhoinner', 'Omar', 'Juan'];
+// Horas de operación destacadas
+const ACTIVE_HOURS = { start: 7, end: 22 };
 
 interface Assignment {
     id: string;
@@ -46,59 +49,44 @@ interface ShiftCalendarProps {
     onDateChange?: (date: Date) => void;
 }
 
-export function ShiftCalendar({ initialAssignments, currentDate: externalDate, onDateChange }: ShiftCalendarProps) {
+function getAgentColor(name: string): string {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return COLOR_PALETTE[Math.abs(hash) % COLOR_PALETTE.length];
+}
+
+export function ShiftCalendar({ initialAssignments, currentDate: externalDate }: ShiftCalendarProps) {
     const { data: session } = useSession();
     const currentDate = externalDate || new Date();
     const [assignments, setAssignments] = useState<Assignment[]>(initialAssignments);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [selectedCell, setSelectedCell] = useState<{ date: Date, hours: number[] } | null>(null);
+    const [selectedCell, setSelectedCell] = useState<{ date: Date; hours: number[] } | null>(null);
     const [agentName, setAgentName] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [users, setUsers] = useState<Array<{ id: string; name: string | null; email: string }>>([]);
+    const [selectionStart, setSelectionStart] = useState<{ date: Date; hour: number } | null>(null);
+    const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
+    const [isSelecting, setIsSelecting] = useState(false);
 
-    useEffect(() => {
-        loadUsers();
-    }, []);
-
-    useEffect(() => {
-        setAssignments(initialAssignments);
-    }, [initialAssignments]);
+    useEffect(() => { loadUsers(); }, []);
+    useEffect(() => { setAssignments(initialAssignments); }, [initialAssignments]);
 
     const loadUsers = async () => {
         try {
             const userList = await getUsers();
             setUsers(userList as any);
-        } catch (error) {
-            console.error("Error loading users:", error);
-        }
+        } catch { /* non-fatal */ }
     };
 
-    // Selección por arrastre
-    const [selectionStart, setSelectionStart] = useState<{ date: Date, hour: number } | null>(null);
-    const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
-    const [isSelecting, setIsSelecting] = useState(false);
-
     const startDate = startOfWeek(currentDate, { weekStartsOn: 1 });
-    const weekDays = eachDayOfInterval({
-        start: startDate,
-        end: addDays(startDate, 6)
-    });
-
+    const weekDays = eachDayOfInterval({ start: startDate, end: addDays(startDate, 6) });
     const hours = Array.from({ length: 24 }, (_, i) => i);
 
     const getAssignmentsForCell = (date: Date, hour: number) => {
         const dateStr = format(date, 'yyyy-MM-dd');
         return assignments.filter(a => a.date === dateStr && a.hour === hour);
-    };
-
-    const getAgentColor = (name: string) => {
-        // Simple hash function to assign a color based on the name
-        let hash = 0;
-        for (let i = 0; i < name.length; i++) {
-            hash = name.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        const index = Math.abs(hash) % COLOR_PALETTE.length;
-        return COLOR_PALETTE[index];
     };
 
     const handleMouseDown = (date: Date, hour: number) => {
@@ -108,18 +96,14 @@ export function ShiftCalendar({ initialAssignments, currentDate: externalDate, o
     };
 
     const handleMouseEnter = (hour: number) => {
-        if (isSelecting) {
-            setSelectionEnd(hour);
-        }
+        if (isSelecting) setSelectionEnd(hour);
     };
 
     const handleMouseUp = () => {
         if (isSelecting && selectionStart && selectionEnd !== null) {
             const start = Math.min(selectionStart.hour, selectionEnd);
             const end = Math.max(selectionStart.hour, selectionEnd);
-            const range = Array.from({ length: end - start + 1 }, (_, i) => start + i);
-
-            setSelectedCell({ date: selectionStart.date, hours: range });
+            setSelectedCell({ date: selectionStart.date, hours: Array.from({ length: end - start + 1 }, (_, i) => start + i) });
             setAgentName('');
             setIsDialogOpen(true);
         }
@@ -138,28 +122,19 @@ export function ShiftCalendar({ initialAssignments, currentDate: externalDate, o
 
     const handleSaveAssignment = async () => {
         if (!selectedCell || !agentName.trim()) return;
-
         setIsSaving(true);
         try {
             const dateStr = format(selectedCell.date, 'yyyy-MM-dd');
             const newAssignments: Assignment[] = [];
-
-            // Guardar múltiples horas
             for (const hour of selectedCell.hours) {
-                const result = await saveSupportAssignment({
-                    date: dateStr,
-                    hour: hour,
-                    agentName: agentName.trim()
-                });
+                const result = await saveSupportAssignment({ date: dateStr, hour, agentName: agentName.trim() });
                 newAssignments.push(result as any);
             }
-
-            // Actualizar estado local
-            setAssignments([...assignments, ...newAssignments]);
+            setAssignments(prev => [...prev, ...newAssignments]);
             setIsDialogOpen(false);
-            toast.success(`${newAssignments.length} horas asignadas correctamente`);
-        } catch (error) {
-            toast.error("Error al guardar la asignación masiva");
+            toast.success(`${newAssignments.length} hora${newAssignments.length > 1 ? 's' : ''} asignada${newAssignments.length > 1 ? 's' : ''}`);
+        } catch {
+            toast.error("Error al guardar la asignación");
         } finally {
             setIsSaving(false);
         }
@@ -169,233 +144,265 @@ export function ShiftCalendar({ initialAssignments, currentDate: externalDate, o
         e.stopPropagation();
         try {
             await deleteSupportAssignment(id);
-            setAssignments(assignments.filter(a => a.id !== id));
+            setAssignments(prev => prev.filter(a => a.id !== id));
             toast.success("Asignación eliminada");
-        } catch (error) {
+        } catch {
             toast.error("Error al eliminar");
         }
     };
 
-    // Resumen semanal de horas
-    const weeklySummary = assignments.reduce((acc, curr) => {
-        const date = new Date(curr.date);
-        if (date >= startDate && date <= addDays(startDate, 6)) {
-            acc[curr.agentName] = (acc[curr.agentName] || 0) + 1;
-        }
-        return acc;
-    }, {} as Record<string, number>);
+    const weeklySummary = useMemo(() => {
+        return assignments.reduce((acc, curr) => {
+            const date = new Date(curr.date);
+            if (date >= startDate && date <= addDays(startDate, 6)) {
+                acc[curr.agentName] = (acc[curr.agentName] || 0) + 1;
+            }
+            return acc;
+        }, {} as Record<string, number>);
+    }, [assignments, startDate]);
 
-    // Orden estable de agentes por día para alineación vertical "tipo bloque"
     const dailyAgentsMap = useMemo(() => {
         const map: Record<string, string[]> = {};
         weekDays.forEach(day => {
             const dStr = format(day, 'yyyy-MM-dd');
-            const agentsInDay = assignments
-                .filter(a => a.date === dStr)
-                .map(a => a.agentName);
-            map[dStr] = Array.from(new Set(agentsInDay)).sort();
+            const agents = [...new Set(assignments.filter(a => a.date === dStr).map(a => a.agentName))].sort();
+            map[dStr] = agents;
         });
         return map;
     }, [assignments, weekDays]);
 
+    const isOffHour = (hour: number) => hour < ACTIVE_HOURS.start || hour > ACTIVE_HOURS.end;
+
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 h-full">
-            <Card className="shadow-lg border-border overflow-hidden flex flex-col bg-background">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 h-full">
+            {/* Main Grid */}
+            <Card className="border-border overflow-hidden flex flex-col bg-background">
                 <CardContent className="p-0 flex-1 flex flex-col">
-                    <ScrollArea className="flex-1">
-                        <div className="min-w-[800px]">
-                            {/* Header Days */}
-                            <div className="grid grid-cols-[50px_repeat(7,1fr)] border-b border-border sticky top-0 bg-background z-20 shadow-sm">
-                                <div className="p-1 border-r border-border bg-muted/50 uppercase text-[8px] font-black flex items-center justify-center text-slate-400">Hora</div>
-                                {weekDays.map((day: Date) => (
-                                    <div key={day.toString()} className={`p-1 text-center border-r border-border last:border-r-0 ${isSameDay(day, new Date()) ? 'bg-primary/5 dark:bg-primary/10' : ''}`}>
-                                        <div className="text-[8px] uppercase font-black text-slate-400">
-                                            {format(day, 'eee', { locale: es })}
+                    <ScrollArea className="h-[calc(100vh-200px)]">
+                        <div className="min-w-[700px]">
+                            {/* Day headers */}
+                            <div className="grid grid-cols-[52px_repeat(7,1fr)] border-b border-border sticky top-0 bg-background z-20">
+                                <div className="p-2 border-r border-border bg-muted/40 flex items-center justify-center">
+                                    <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">H</span>
+                                </div>
+                                {weekDays.map((day: Date) => {
+                                    const isToday = isSameDay(day, new Date());
+                                    return (
+                                        <div key={day.toString()} className={cn(
+                                            "p-2 text-center border-r border-border last:border-r-0",
+                                            isToday && "bg-primary/5"
+                                        )}>
+                                            <div className="text-[9px] uppercase font-semibold text-muted-foreground">
+                                                {format(day, 'eee', { locale: es })}
+                                            </div>
+                                            <div className={cn(
+                                                "text-sm font-bold mt-0.5",
+                                                isToday ? "text-primary" : "text-foreground"
+                                            )}>
+                                                {format(day, 'dd')}
+                                            </div>
                                         </div>
-                                        <div className={`text-xs font-black ${isSameDay(day, new Date()) ? 'text-blue-600' : 'text-slate-700'}`}>
-                                            {format(day, 'dd')}
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
 
-                            {/* Grid Body */}
+                            {/* Hour rows */}
                             <div className="divide-y divide-border">
-                                {hours.map(hour => (
-                                    <div key={hour} className="grid grid-cols-[50px_repeat(7,1fr)] group hover:bg-muted/30 transition-colors">
-                                        <div className="p-1 border-r border-border bg-muted/20 flex items-center justify-center text-[9px] font-mono text-slate-400">
-                                            {String(hour).padStart(2, '0')}:00
-                                        </div>
-                                        {weekDays.map((day: Date) => {
-                                            const cellAssignments = getAssignmentsForCell(day, hour);
-                                            const isSelected = isCellSelected(day, hour);
-                                            const dayAgents = dailyAgentsMap[format(day, 'yyyy-MM-dd')] || [];
-                                            const gridCols = Math.max(3, dayAgents.length);
+                                {hours.map(hour => {
+                                    const offHour = isOffHour(hour);
+                                    return (
+                                        <div key={hour} className={cn(
+                                            "grid grid-cols-[52px_repeat(7,1fr)]",
+                                            offHour ? "h-[28px] opacity-50" : "h-[40px]"
+                                        )}>
+                                            {/* Hour label */}
+                                            <div className={cn(
+                                                "border-r border-border flex items-center justify-center",
+                                                offHour ? "bg-muted/30" : "bg-muted/10"
+                                            )}>
+                                                <span className="text-[9px] font-mono text-muted-foreground">
+                                                    {String(hour).padStart(2, '0')}h
+                                                </span>
+                                            </div>
 
-                                            return (
-                                                <div
-                                                    key={day.toString() + hour}
-                                                    className={`p-0.5 border-r border-border last:border-r-0 h-[34px] relative group/cell transition-colors cursor-crosshair select-none
-                                                        ${isSelected ? 'bg-primary/20 ring-1 ring-primary/30 z-10' : 'hover:bg-primary/5 dark:hover:bg-primary/10'}
-                                                    `}
-                                                    onMouseDown={() => handleMouseDown(day, hour)}
-                                                    onMouseEnter={() => handleMouseEnter(hour)}
-                                                    onMouseUp={handleMouseUp}
-                                                >
+                                            {/* Day cells */}
+                                            {weekDays.map((day: Date) => {
+                                                const cellAssignments = getAssignmentsForCell(day, hour);
+                                                const isSelected = isCellSelected(day, hour);
+                                                const dayAgents = dailyAgentsMap[format(day, 'yyyy-MM-dd')] || [];
+
+                                                return (
                                                     <div
-                                                        className="grid gap-0.5 h-full overflow-y-auto scrollbar-hide pr-0.5 content-start"
-                                                        style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
+                                                        key={day.toString() + hour}
+                                                        className={cn(
+                                                            "border-r border-border last:border-r-0 relative select-none overflow-hidden",
+                                                            offHour ? "bg-muted/20 cursor-default" : "cursor-crosshair",
+                                                            isSelected && "bg-primary/20 ring-inset ring-1 ring-primary/40",
+                                                            !isSelected && !offHour && "hover:bg-primary/5"
+                                                        )}
+                                                        onMouseDown={() => !offHour && handleMouseDown(day, hour)}
+                                                        onMouseEnter={() => handleMouseEnter(hour)}
+                                                        onMouseUp={handleMouseUp}
                                                     >
-                                                        {dayAgents.map((agentName: string) => {
-                                                            const assignment = cellAssignments.find(a => a.agentName === agentName);
-                                                            if (!assignment) return <div key={agentName} className="h-6" />;
-
-                                                            const color = getAgentColor(assignment.agentName);
-                                                            const colorStyles = AGENT_COLORS[color] || 'bg-slate-100 text-slate-700';
-                                                            const firstName = assignment.agentName.split(' ')[0];
-
-                                                            return (
-                                                                <Badge
-                                                                    key={assignment.id}
-                                                                    variant="secondary"
-                                                                    className={`text-[7px] px-0.5 py-0 h-6 border leading-tight font-black group hover:scale-105 transition-transform cursor-pointer flex items-center justify-between gap-0.5 w-full shrink-0 ${colorStyles} shadow-sm overflow-hidden`}
-                                                                    onClick={(e) => handleDeleteAssignment(assignment.id, e)}
-                                                                    onMouseDown={(e) => e.stopPropagation()}
-                                                                >
-                                                                    <span className="truncate flex-1 text-center">{firstName}</span>
-                                                                    <div className="hover:bg-black/10 rounded-full p-0.5 transition-colors flex-shrink-0">
-                                                                        <X size={8} className="text-current" />
-                                                                    </div>
-                                                                </Badge>
-                                                            );
-                                                        })}
+                                                        {cellAssignments.length > 0 && (
+                                                            <div className="flex gap-px p-px h-full items-center flex-wrap">
+                                                                {cellAssignments.map(assignment => {
+                                                                    const colorClass = AGENT_COLOR_CLASSES[getAgentColor(assignment.agentName)] || AGENT_COLOR_CLASSES[COLOR_PALETTE[0]];
+                                                                    const firstName = assignment.agentName.split(' ')[0];
+                                                                    return (
+                                                                        <div
+                                                                            key={assignment.id}
+                                                                            className={cn(
+                                                                                "flex items-center gap-0.5 px-1 rounded text-[9px] font-semibold border h-5 max-w-full",
+                                                                                colorClass
+                                                                            )}
+                                                                            onMouseDown={e => e.stopPropagation()}
+                                                                        >
+                                                                            <span className="truncate">{firstName}</span>
+                                                                            <button
+                                                                                className="opacity-50 hover:opacity-100 transition-opacity flex-shrink-0"
+                                                                                onClick={e => handleDeleteAssignment(assignment.id, e)}
+                                                                            >
+                                                                                <X size={8} />
+                                                                            </button>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ))}
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     </ScrollArea>
                 </CardContent>
             </Card>
 
-            {/* Sidebar de Resumen */}
-            <Card className="h-fit">
-                <CardHeader>
-                    <CardTitle className="text-sm font-bold flex items-center gap-2">
-                        <UserPlus size={16} className="text-blue-500" />
-                        Horas esta Semana
-                    </CardTitle>
-                    <CardDescription className="text-xs">Control de carga horaria por agente</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
+            {/* Sidebar */}
+            <div className="flex flex-col gap-4">
+                {/* Weekly summary */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm flex items-center gap-2">
+                            <UserPlus size={14} className="text-primary" />
+                            Carga Semanal
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 space-y-2">
                         {Object.entries(weeklySummary).length === 0 ? (
-                            <p className="text-xs text-slate-400 italic text-center py-4">Sin horas asignadas esta semana</p>
+                            <p className="text-xs text-muted-foreground italic text-center py-2">Sin asignaciones esta semana</p>
                         ) : (
                             Object.entries(weeklySummary)
                                 .sort((a, b) => b[1] - a[1])
-                                .map(([name, hours]) => {
-                                    const color = getAgentColor(name);
-                                    const colorStyles = AGENT_COLORS[color] || 'bg-slate-100 text-slate-700';
-                                    const isOverLimit = hours > 45; // Alerta si pasa de 45 horas
-
+                                .map(([name, hrs]) => {
+                                    const colorClass = AGENT_COLOR_CLASSES[getAgentColor(name)];
+                                    const isOver = hrs > 45;
                                     return (
-                                        <div key={name} className="flex items-center justify-between p-2 rounded-lg border border-border bg-muted/30">
+                                        <div key={name} className="flex items-center justify-between gap-2">
                                             <div className="flex items-center gap-2 min-w-0">
-                                                <div className={`w-2 h-2 rounded-full ${colorStyles.split(' ')[0]}`} />
-                                                <span className="text-xs font-semibold truncate">{name}</span>
+                                                <div className={cn("w-2 h-2 rounded-full border", colorClass)} />
+                                                <span className="text-xs font-medium truncate">{name}</span>
                                             </div>
-                                            <Badge variant={isOverLimit ? "destructive" : "outline"} className="text-[10px] font-bold">
-                                                {hours}h
+                                            <Badge
+                                                variant={isOver ? "destructive" : "outline"}
+                                                className="text-[10px] font-bold shrink-0"
+                                            >
+                                                {hrs}h
                                             </Badge>
                                         </div>
                                     );
                                 })
                         )}
+                    </CardContent>
+                </Card>
 
-                        <div className="pt-4 border-t space-y-3">
-                            <h4 className="text-[10px] font-bold text-slate-400 uppercase">Integraciones</h4>
-                            {session?.user ? (
-                                <GoogleCalendarSettings assignmentsInView={assignments.filter(a => {
-                                    const date = new Date(a.date);
-                                    return date >= startDate && date <= addDays(startDate, 6);
-                                })} />
-                            ) : (
-                                <p className="text-[10px] text-slate-400 italic">Inicia sesión para sincronizar calendarios</p>
-                            )}
-                        </div>
+                {/* Handover */}
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">Entrega de Turno</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 space-y-2">
+                        <HandoverAlert assignments={assignments} />
+                        <HandoverDialog assignments={assignments} />
+                    </CardContent>
+                </Card>
 
-                        <div className="pt-4 border-t space-y-3">
-                            <h4 className="text-[10px] font-bold text-slate-400 uppercase">Entrega de Turno</h4>
-                            <HandoverAlert assignments={assignments} />
-                            <HandoverDialog assignments={assignments} />
-                        </div>
+                {/* Google Calendar */}
+                {session?.user && (
+                    <Card>
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm">Google Calendar</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-0">
+                            <GoogleCalendarSettings assignmentsInView={assignments.filter(a => {
+                                const date = new Date(a.date);
+                                return date >= startDate && date <= addDays(startDate, 6);
+                            })} />
+                        </CardContent>
+                    </Card>
+                )}
 
-                        <div className="pt-4 border-t">
-                            <h4 className="text-[10px] font-bold text-slate-400 uppercase mb-2">Ayuda</h4>
-                            <ul className="text-[10px] text-slate-500 space-y-1">
-                                <li>• Arrastra para asignar bloques</li>
-                                <li>• Clic en nombre para borrar</li>
-                                <li>• Max recomendado: 45h/semana</li>
-                            </ul>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+                {/* Upload */}
+                <UploadShiftsDialog />
+            </div>
 
-            {/* Dialogo de Asignación Manual */}
+            {/* Assignment Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-[400px]">
+                <DialogContent className="sm:max-w-[380px]">
                     <DialogHeader>
                         <DialogTitle>Asignar Agente</DialogTitle>
                         <DialogDescription>
                             {selectedCell && (
                                 <>
-                                    Asignar soporte para el {format(selectedCell.date, 'dd/MM/yyyy')}
+                                    {format(selectedCell.date, "EEEE dd 'de' MMMM", { locale: es })}
                                     {selectedCell.hours.length > 1
-                                        ? ` (${selectedCell.hours[0]}:00 a ${selectedCell.hours[selectedCell.hours.length - 1]}:00)`
-                                        : ` a las ${String(selectedCell.hours[0]).padStart(2, '0')}:00`
-                                    }
+                                        ? ` · ${selectedCell.hours[0]}:00 – ${selectedCell.hours[selectedCell.hours.length - 1] + 1}:00`
+                                        : ` · ${String(selectedCell.hours[0]).padStart(2, '0')}:00`}
                                 </>
                             )}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="py-4 space-y-4">
-                        <div className="flex flex-wrap gap-2">
-                            {users.map(user => (
-                                <Button
-                                    key={user.id}
-                                    variant={agentName === (user.name || user.email) ? "default" : "outline"}
-                                    size="sm"
-                                    className="text-xs h-7 px-2"
-                                    onClick={() => setAgentName(user.name || user.email)}
-                                >
-                                    {user.name || user.email}
-                                </Button>
-                            ))}
+                    <div className="py-3 space-y-3">
+                        {users.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                                {users.map(user => {
+                                    const name = user.name || user.email;
+                                    const selected = agentName === name;
+                                    return (
+                                        <button
+                                            key={user.id}
+                                            onClick={() => setAgentName(name)}
+                                            className={cn(
+                                                "px-2.5 py-1 rounded-md text-xs font-medium border transition-colors",
+                                                selected
+                                                    ? "bg-primary text-primary-foreground border-primary"
+                                                    : "bg-muted/50 border-border hover:bg-muted text-foreground"
+                                            )}
+                                        >
+                                            {name}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        <div className="relative">
+                            <Input
+                                placeholder="Otro nombre..."
+                                value={agentName}
+                                onChange={e => setAgentName(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleSaveAssignment()}
+                                className="h-8 text-sm"
+                            />
                         </div>
-
-                        <div className="flex items-center gap-2">
-                            <div className="h-px bg-slate-100 flex-1" />
-                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">O escribir otro</span>
-                            <div className="h-px bg-slate-100 flex-1" />
-                        </div>
-
-                        <Input
-                            placeholder="Nombre del agente..."
-                            value={agentName}
-                            onChange={(e) => setAgentName(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSaveAssignment()}
-                            className="h-9 text-sm"
-                        />
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                        <Button onClick={handleSaveAssignment} disabled={isSaving || !agentName.trim()}>
-                            {isSaving ? "Guardando..." : "Confirmar"}
+                        <Button variant="outline" size="sm" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+                        <Button size="sm" onClick={handleSaveAssignment} disabled={isSaving || !agentName.trim()}>
+                            {isSaving ? "Guardando..." : "Asignar"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
