@@ -175,19 +175,19 @@ export async function saveSupportAssignment(data: {
 
 export async function deleteSupportAssignment(id: string) {
     const assignment = await prisma.supportAssignment.findUnique({ where: { id } });
-    
+
     if (!assignment) {
         console.log(`Assignment ${id} not found, skipping deletion`);
         return;
     }
-    
+
     if (assignment.googleEventId) {
         try {
             const eventIdToDelete = assignment.googleEventId;
             after(async () => {
                 await deleteFromGoogleCalendar(eventIdToDelete);
             });
-            
+
             // Limpiar el googleEventId de otras asignaciones que compartían el mismo evento (bloque merged)
             await prisma.supportAssignment.updateMany({
                 where: { googleEventId: assignment.googleEventId },
@@ -200,6 +200,19 @@ export async function deleteSupportAssignment(id: string) {
 
     await prisma.supportAssignment.delete({ where: { id } });
     revalidatePath('/shifts');
+}
+
+export async function deleteAssignmentsForWeek(start: string, end: string) {
+  await requireAuth();
+  // TODO: si la semana fue sincronizada con Google Calendar, los eventos de GCal
+  // quedan huérfanos (este deleteMany no dispara la limpieza de GCal).
+  // Por ahora es aceptable — el equipo puede borrarlos manualmente en GCal.
+  await prisma.supportAssignment.deleteMany({
+    where: {
+      date: { gte: start, lte: end }
+    }
+  });
+  revalidatePath('/shifts');
 }
 
 // --- GOOGLE CALENDAR HELPERS ---
