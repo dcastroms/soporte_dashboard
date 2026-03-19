@@ -259,3 +259,47 @@ model ClientActionLog {
   authorName String
   timestamp DateTime @default(now())
 }
+
+// A.5 — Knowledge base for AI RAG
+model KnowledgeDoc {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  content     String           // Full original text / image description
+  uploadedBy  String
+  docType     String           @default("text") // "text" | "pdf" | "image"
+  imageUrl    String?          // relative path for image docs
+  sourceType  String?          // "manual" | "ticket" | "script"
+  sourceId    String?          // conversationId de Intercom (para dedup)
+  category    String?          // Módulo de Mediastream Platform
+  createdAt   DateTime         @default(now())
+  chunks      KnowledgeChunk[]
+
+  @@index([sourceId])
+}
+
+model KnowledgeChunk {
+  id         String       @id @default(auto()) @map("_id") @db.ObjectId
+  docId      String       @db.ObjectId
+  doc        KnowledgeDoc @relation(fields: [docId], references: [id], onDelete: Cascade)
+  text       String
+  embedding  Float[]      // Vector from nomic-embed-text via Ollama
+  chunkIndex Int
+}
+
+// Generic key-value config store for AI settings (systemPrompt, etc.)
+model AiConfig {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model AiSuggestionLog {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String
+  suggestion     String
+  accepted       Boolean? // null = no feedback, true = 👍, false = 👎
+  agentEmail     String
+  usedKnowledge  Boolean  @default(false)
+  createdAt      DateTime @default(now())
+}

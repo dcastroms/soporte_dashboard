@@ -8,7 +8,8 @@ const INTERCOM_SECRET = process.env.INTERCOM_CLIENT_SECRET || "";
 const INTERCOM_APP_ID = process.env.INTERCOM_APP_ID || "here";
 
 function verifySignature(body: string, signature: string | null): boolean {
-  if (!INTERCOM_SECRET || !signature) return true; // Skip verification in dev if secret not set
+  if (!INTERCOM_SECRET) return false; // fail-closed: reject all if secret not configured
+  if (!signature) return false;
   const digest = crypto
     .createHmac("sha256", INTERCOM_SECRET)
     .update(body)
@@ -35,7 +36,6 @@ export async function POST(req: NextRequest) {
   const topic = payload.topic as string;       // e.g. "conversation.user.created"
   const data = payload.data?.item;             // Intercom conversation object
 
-  console.log(`[Webhook] Received: ${topic}`);
 
   // Note: Add a WebhookEvent model to prisma/schema.prisma for persistent audit logging.
   // For now, events are only processed in-memory and broadcast via SSE.
@@ -56,12 +56,14 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  if (topic === "conversation.admin.replied") {
+  if (
+    topic === "conversation.admin.replied" ||
+    topic === "conversation.user.replied" ||
+    topic === "conversation.admin.noted"
+  ) {
     const conversationId = data?.id;
-    const adminName = data?.admin_assignee_id ? "Agente" : "Desconocido";
     broadcast("ticket_updated", {
       id: conversationId,
-      adminName,
       timestamp: new Date().toISOString(),
     });
   }
