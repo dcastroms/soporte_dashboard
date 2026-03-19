@@ -33,9 +33,6 @@ const AGENT_COLOR_CLASSES: Record<string, string> = {
 
 const COLOR_PALETTE = Object.keys(AGENT_COLOR_CLASSES);
 
-// Horas de operación destacadas
-const ACTIVE_HOURS = { start: 7, end: 22 };
-
 interface Assignment {
     id: string;
     date: string;
@@ -161,18 +158,6 @@ export function ShiftCalendar({ initialAssignments, currentDate: externalDate }:
         }, {} as Record<string, number>);
     }, [assignments, startDate]);
 
-    const dailyAgentsMap = useMemo(() => {
-        const map: Record<string, string[]> = {};
-        weekDays.forEach(day => {
-            const dStr = format(day, 'yyyy-MM-dd');
-            const agents = [...new Set(assignments.filter(a => a.date === dStr).map(a => a.agentName))].sort();
-            map[dStr] = agents;
-        });
-        return map;
-    }, [assignments, weekDays]);
-
-    const isOffHour = (hour: number) => hour < ACTIVE_HOURS.start || hour > ACTIVE_HOURS.end;
-
     return (
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 h-full">
             {/* Main Grid */}
@@ -208,18 +193,10 @@ export function ShiftCalendar({ initialAssignments, currentDate: externalDate }:
 
                             {/* Hour rows */}
                             <div className="divide-y divide-border">
-                                {hours.map(hour => {
-                                    const offHour = isOffHour(hour);
-                                    return (
-                                        <div key={hour} className={cn(
-                                            "grid grid-cols-[52px_repeat(7,1fr)]",
-                                            offHour ? "h-[28px] opacity-50" : "h-[40px]"
-                                        )}>
+                                {hours.map(hour => (
+                                    <div key={hour} className="grid grid-cols-[52px_repeat(7,1fr)] h-[40px]">
                                             {/* Hour label */}
-                                            <div className={cn(
-                                                "border-r border-border flex items-center justify-center",
-                                                offHour ? "bg-muted/30" : "bg-muted/10"
-                                            )}>
+                                            <div className="border-r border-border flex items-center justify-center bg-muted/10">
                                                 <span className="text-[9px] font-mono text-muted-foreground">
                                                     {String(hour).padStart(2, '0')}h
                                                 </span>
@@ -229,18 +206,16 @@ export function ShiftCalendar({ initialAssignments, currentDate: externalDate }:
                                             {weekDays.map((day: Date) => {
                                                 const cellAssignments = getAssignmentsForCell(day, hour);
                                                 const isSelected = isCellSelected(day, hour);
-                                                const dayAgents = dailyAgentsMap[format(day, 'yyyy-MM-dd')] || [];
 
                                                 return (
                                                     <div
                                                         key={day.toString() + hour}
                                                         className={cn(
-                                                            "border-r border-border last:border-r-0 relative select-none overflow-hidden",
-                                                            offHour ? "bg-muted/20 cursor-default" : "cursor-crosshair",
+                                                            "border-r border-border last:border-r-0 relative select-none overflow-hidden cursor-crosshair",
                                                             isSelected && "bg-primary/20 ring-inset ring-1 ring-primary/40",
-                                                            !isSelected && !offHour && "hover:bg-primary/5"
+                                                            !isSelected && "hover:bg-primary/5"
                                                         )}
-                                                        onMouseDown={() => !offHour && handleMouseDown(day, hour)}
+                                                        onMouseDown={() => handleMouseDown(day, hour)}
                                                         onMouseEnter={() => handleMouseEnter(hour)}
                                                         onMouseUp={handleMouseUp}
                                                     >
@@ -274,8 +249,7 @@ export function ShiftCalendar({ initialAssignments, currentDate: externalDate }:
                                                 );
                                             })}
                                         </div>
-                                    );
-                                })}
+                                    ))}
                             </div>
                         </div>
                     </ScrollArea>
