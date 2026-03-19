@@ -141,6 +141,44 @@ No new API routes or Prisma schema changes needed.
 
 ---
 
+---
+
+## Implementation Notes
+
+### "Limpiar semana" — new server action required
+A new server action `deleteAssignmentsForWeek(start: string, end: string)` must be added to `src/lib/actions.ts`. It deletes all `SupportAssignment` records where `date >= start && date <= end` in a single Prisma `deleteMany` call. The client passes the ISO dates of Monday and Sunday of the visible week.
+
+### Drag is single-column only
+The drag interaction extends **vertically within one column (one day)** only. `selectionStart.date` is fixed at mousedown; mouseenter only updates `selectionEnd` (the hour). If the user drags horizontally to another column, the selection does not extend — it stays on the original day. This matches the current behavior.
+
+### Component architecture — toolbar inside ShiftCalendar
+The toolbar, agent bar, `HandoverAlert`, `GoogleCalendarSettings`, and `HandoverDialog` all live **inside `ShiftCalendar`**, not in `page.tsx`. This keeps `assignments` state co-located with all components that need it, avoiding prop-drilling. `page.tsx` remains a thin shell that passes `initialAssignments` and `currentDate` down.
+
+### HandoverAlert placement
+`HandoverAlert` renders as a **full-width banner above the toolbar**, not inside the toolbar row. It is conditionally rendered (zero height when there is no pending handover), so it does not affect the toolbar layout.
+
+### Multi-agent save — parallel with partial error handling
+When the user clicks "Asignar", all `saveSupportAssignment` calls are fired in parallel via `Promise.allSettled`. The overload constant is defined as `const OVERLOAD_HOURS = 45` at the top of `ShiftCalendar.tsx`.
+
+```ts
+const results = await Promise.allSettled(
+  selectedAgents.flatMap(agent =>
+    selectedHours.map(hour => saveSupportAssignment({ date, hour, agentName: agent }))
+  )
+);
+const failed = results.filter(r => r.status === 'rejected').length;
+if (failed > 0) toast.warning(`${failed} asignación(es) no se pudieron guardar`);
+```
+
+### Existing server actions used
+- `getSupportAssignments({ start, end })` — loads assignments for the visible week (used in page.tsx)
+- `saveSupportAssignment({ date, hour, agentName })` — upserts a single assignment
+- `deleteSupportAssignment(id)` — deletes a single assignment
+- `deleteAssignmentsForWeek(start, end)` — NEW, bulk delete for "Limpiar semana"
+- `getUsers()` — loads user list for the assignment dialog
+
+---
+
 ## Out of Scope
 
 - Excel direct import (the team will use the dashboard as primary tool going forward)
