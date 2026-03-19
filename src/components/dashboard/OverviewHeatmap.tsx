@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -8,18 +9,21 @@ const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 interface HeatmapProps {
     data: { dayOfWeek: number; hour: number; count: number }[];
+    frtByDay?: (number | null)[]; // FRT in minutes per day, index = dayOfWeek (0=Sun)
 }
 
-export function OverviewHeatmap({ data }: HeatmapProps) {
-    // 1. Transformar data para acceso rápido
-    const map = new Map<string, number>();
-    let max = 0;
-
-    data.forEach(d => {
-        const key = `${d.dayOfWeek}-${d.hour}`;
-        map.set(key, d.count);
-        if (d.count > max) max = d.count;
-    });
+export function OverviewHeatmap({ data, frtByDay }: HeatmapProps) {
+    // 1. Transformar data para acceso rápido (memoizado para evitar recalcular en cada render)
+    const { map, max } = useMemo(() => {
+        const map = new Map<string, number>();
+        let max = 0;
+        data.forEach(d => {
+            const key = `${d.dayOfWeek}-${d.hour}`;
+            map.set(key, d.count);
+            if (d.count > max) max = d.count;
+        });
+        return { map, max };
+    }, [data]);
 
     const getIntensityStyle = (count: number) => {
         if (count === 0) return { backgroundColor: 'var(--muted)', opacity: 0.3 };
@@ -79,16 +83,23 @@ export function OverviewHeatmap({ data }: HeatmapProps) {
                         ))}
                     </div>
 
-                    {/* Meta Column: FRT Avg (Mock/Simulated to match visual) */}
+                    {/* FRT column: real avg per day of week from IntercomMetric */}
                     <div className="flex flex-col justify-around text-[9px] font-bold text-slate-500 pl-2 border-l border-white/5">
-                        {DAYS.map(d => <div key={d} className="h-4 leading-4 text-[#9E77E5]">~4m</div>)}
+                        {DAYS.map((_, i) => {
+                            const frt = frtByDay?.[i];
+                            return (
+                                <div key={i} className="h-4 leading-4" style={{ color: frt != null ? (frt <= 5 ? '#67AA09' : frt <= 10 ? '#f59e0b' : '#ef4444') : '#9E77E5' }}>
+                                    {frt != null ? `${frt}m` : '—'}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 
                 <div className="flex justify-between items-center mt-6">
                     <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium">
-                        <div className="w-1.5 h-1.5 rounded-full bg-[#9E77E5]" />
-                        <span>Columna derecha: Promedio FRT por hora (Meta: &lt;5m)</span>
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#67AA09]" />
+                        <span>Columna derecha: FRT promedio por día · Verde &lt;5m · Amarillo &lt;10m · Rojo &gt;10m</span>
                     </div>
                     <div className="flex items-center gap-2 text-[10px] text-slate-400">
                         <span>Menos</span>

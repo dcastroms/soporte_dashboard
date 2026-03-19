@@ -31,7 +31,6 @@ export async function createTeamLog(data: {
   const log = await prisma.teamLog.create({
     data
   });
-  revalidatePath('/logs');
   return log;
 }
 
@@ -90,7 +89,6 @@ export async function createAutomation(data: {
   const automation = await prisma.automation.create({
     data
   });
-  revalidatePath('/automations');
   return automation;
 }
 export async function createGoal(data: {

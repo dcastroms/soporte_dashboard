@@ -16,11 +16,13 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
+        if (!credentials.email.endsWith('@mediastre.am')) return null;
+
         const user = await prisma.user.findUnique({
           where: { email: credentials.email }
         });
 
-        if (!user) return null;
+        if (!user || !user.password) return null;
 
         const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
 
@@ -36,7 +38,6 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
-      allowDangerousEmailAccountLinking: true,
       authorization: {
         params: {
           scope: "openid email profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly",

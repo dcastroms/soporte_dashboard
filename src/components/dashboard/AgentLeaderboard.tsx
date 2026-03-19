@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,8 +16,11 @@ interface Agent {
 }
 
 export function AgentLeaderboard({ agents }: { agents: Agent[] }) {
-    // Ordenar por tickets resueltos por defecto
-    const sortedAgents = [...agents].sort((a, b) => b.tickets - a.tickets).slice(0, 5); // Top 5
+    // Ordenar por tickets resueltos (memoizado para evitar re-sort en cada render)
+    const sortedAgents = useMemo(
+        () => [...agents].sort((a, b) => b.tickets - a.tickets).slice(0, 5),
+        [agents]
+    );
 
     return (
         <Card>

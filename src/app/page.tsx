@@ -58,6 +58,12 @@ export default async function OverviewPage({
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const todayEnd = new Date(todayStart.getTime() + 86400000);
 
+  // Helper para capturar errores sin romper el layout
+  async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<[T, boolean]> {
+    try { return [await fn(), false]; }
+    catch { return [fallback, true]; }
+  }
+
   const [
     automations,
     backlog,
@@ -68,12 +74,14 @@ export default async function OverviewPage({
     trendData,
     rawMetrics,
     syncStatus,
-    redFlagTickets,
-    ticketInsights,
-    reopenData,
-    criticalAccounts,
-    weeklyEfficiency,
+    [redFlagTickets, redFlagError],
+    [ticketInsights],
+    [reopenData],
+    [criticalAccounts, criticalError],
+    [weeklyEfficiency, efficiencyError],
     activeEvents,
+    aiDocCount,
+    aiChunkCount,
   ] = await Promise.all([
     getAutomations(),
     getBacklogItems(),
@@ -84,15 +92,17 @@ export default async function OverviewPage({
     getIntercomTrendData(range),
     import('@/lib/intercom').then(mod => mod.getIntercomMetrics()),
     prisma.intercomSyncStatus.findFirst({ orderBy: { lastSync: 'desc' } }),
-    getRedFlagTickets().catch(() => []),
-    getTicketTypeInsights().catch(() => []),
-    getReopenRate().catch(() => ({ rate: 0, isAlert: false })),
-    getCriticalAccounts().catch(() => []),
-    getWeeklyEfficiency().catch(() => ({ received: 0, solved: 0, efficiency: 0 })),
+    safe(() => getRedFlagTickets(), []),
+    safe(() => getTicketTypeInsights(), []),
+    safe(() => getReopenRate(), { rate: 0, isAlert: false }),
+    safe(() => getCriticalAccounts(), []),
+    safe(() => getWeeklyEfficiency(), { received: 0, solved: 0, efficiency: 0 }),
     prisma.event.findMany({
       where: { startDate: { lte: todayEnd }, endDate: { gte: todayStart } },
       orderBy: { startDate: 'asc' },
     }),
+    prisma.knowledgeDoc.count().catch(() => 0),
+    prisma.knowledgeChunk.count().catch(() => 0),
   ]);
   // Compute ambient glow class based on active event type (server-side)
   const glowStyles: Record<string, string> = {
@@ -140,6 +150,17 @@ export default async function OverviewPage({
   const isSlaBreached = latestIntercom && (latestIntercom.avgFirstResponseTime || 0) > slaThreshold;
 
   const { chartData, trends } = trendData as any;
+
+  // Compute real FRT per day-of-week from chartData (for heatmap column)
+  const frtSums = Array(7).fill(0);
+  const frtCounts = Array(7).fill(0);
+  for (const d of (chartData as any[])) {
+    const dow = new Date(d.date + "T12:00:00").getDay();
+    if (d.frt > 0) { frtSums[dow] += d.frt; frtCounts[dow]++; }
+  }
+  const frtByDay = frtSums.map((sum, i) =>
+    frtCounts[i] > 0 ? Math.round(sum / frtCounts[i] / 60) : null
+  );
 
   const kpis = [
     {
@@ -246,8 +267,12 @@ export default async function OverviewPage({
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left col: charts only */}
         <div className="lg:col-span-2 space-y-6">
-          <EfficiencyChart />
-          <OverviewHeatmap data={heatmapData as any} />
+          <EfficiencyChart
+            data={chartData}
+            volumeTrend={trends?.volume}
+            frtTrend={trends?.frt}
+          />
+          <OverviewHeatmap data={heatmapData as any} frtByDay={frtByDay} />
         </div>
 
         {/* Right col: stacked snapshot cards — fills full height */}
@@ -360,8 +385,14 @@ export default async function OverviewPage({
       </div>
 
       {/* Audit Row: Red Flags (compact) + Quick Navigation */}
-      <div className="grid gap-6 md:grid-cols-3">
-        <div className="md:col-span-2">
+      <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-4">
+        <div className="md:col-span-2 lg:col-span-2">
+          {redFlagError && (
+            <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-[10px] font-medium">
+              <AlertCircle size={12} />
+              No se pudieron cargar los tickets con alertas. Los datos pueden estar desactualizados.
+            </div>
+          )}
           <FocusAudit initialTickets={redFlagTickets as any} />
         </div>
 
@@ -378,31 +409,78 @@ export default async function OverviewPage({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/20 text-center">
-                <p className="text-lg font-black text-primary">{(weeklyEfficiency as any).efficiency}%</p>
-                <p className="text-[8px] text-muted-foreground">Eficiencia semanal</p>
-                <p className="text-[8px] text-muted-foreground">{(weeklyEfficiency as any).solved}/{(weeklyEfficiency as any).received} resueltos</p>
+            {(efficiencyError || criticalError) ? (
+              <div className="flex items-center gap-2 py-4 px-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-[10px] font-medium">
+                <AlertCircle size={12} className="shrink-0" />
+                No se pudo cargar la inteligencia de clientes. Intenta recargar.
               </div>
-              <div className={`p-2.5 rounded-xl border text-center ${(criticalAccounts as any).length > 0
-                ? "bg-destructive/5 border-destructive/20"
-                : "bg-success/5 border-success/20"
-                }`}>
-                <p className={`text-lg font-black ${(criticalAccounts as any).length > 0 ? "text-destructive" : "text-success"}`}>
-                  {(criticalAccounts as any).length}
-                </p>
-                <p className="text-[8px] text-muted-foreground">Cuentas críticas</p>
-                <p className="text-[8px] text-muted-foreground">
-                  {(criticalAccounts as any).length > 0 ? "requieren atención" : "todo en orden"}
-                </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/20 text-center">
+                  <p className="text-lg font-black text-primary">{(weeklyEfficiency as any).efficiency}%</p>
+                  <p className="text-[8px] text-muted-foreground">Eficiencia semanal</p>
+                  <p className="text-[8px] text-muted-foreground">{(weeklyEfficiency as any).solved}/{(weeklyEfficiency as any).received} resueltos</p>
+                </div>
+                <div className={`p-2.5 rounded-xl border text-center ${(criticalAccounts as any).length > 0
+                  ? "bg-destructive/5 border-destructive/20"
+                  : "bg-success/5 border-success/20"
+                  }`}>
+                  <p className={`text-lg font-black ${(criticalAccounts as any).length > 0 ? "text-destructive" : "text-success"}`}>
+                    {(criticalAccounts as any).length}
+                  </p>
+                  <p className="text-[8px] text-muted-foreground">Cuentas críticas</p>
+                  <p className="text-[8px] text-muted-foreground">
+                    {(criticalAccounts as any).length > 0 ? "requieren atención" : "todo en orden"}
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
             <p className="text-[9px] text-secondary font-bold group-hover:underline">
               Ver auditoría completa →
             </p>
           </div>
         </Link>
+
+        {/* IA Knowledge Base stats */}
+        <Link href="/knowledge" className="group block">
+          <div className="card-neumorphic rounded-2xl p-4 h-full hover:border-primary/40 hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Zap size={14} className="text-primary" />
+              </div>
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-tight text-foreground">IA · Asistente</p>
+                <p className="text-[9px] text-muted-foreground">Base de conocimiento</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/20 text-center">
+                <p className="text-lg font-black text-primary">{aiDocCount}</p>
+                <p className="text-[8px] text-muted-foreground">Documentos</p>
+                <p className="text-[8px] text-muted-foreground">indexados</p>
+              </div>
+              <div className="p-2.5 rounded-xl bg-muted/40 border border-border/40 text-center">
+                <p className="text-lg font-black text-foreground">{aiChunkCount}</p>
+                <p className="text-[8px] text-muted-foreground">Fragmentos</p>
+                <p className="text-[8px] text-muted-foreground">para búsqueda</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${aiDocCount > 0 ? "bg-primary animate-pulse" : "bg-muted-foreground"}`} />
+              <p className="text-[9px] text-muted-foreground">
+                {aiDocCount > 0 ? "IA activa con contexto" : "Sin documentos — agrega contenido"}
+              </p>
+            </div>
+
+            <p className="text-[9px] text-primary font-bold group-hover:underline">
+              Gestionar conocimiento →
+            </p>
+          </div>
+        </Link>
+
       </div>
 
     </div >

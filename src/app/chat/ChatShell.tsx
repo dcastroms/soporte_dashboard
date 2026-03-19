@@ -30,18 +30,50 @@ export function ChatShell() {
     fetchConversations();
   }, [fetchConversations]);
 
-  // Refresh list on new ticket via SSE
+  // B.15: Refresh list + show push notification on new ticket
   useLiveEvents({
-    onNewTicket: () => fetchConversations(),
+    onNewTicket: (data) => {
+      fetchConversations();
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("🎫 Nuevo ticket", {
+          body: data?.subject || "Hay un nuevo ticket abierto",
+          icon: "/favicon.ico",
+        });
+      }
+    },
     showToasts: false,
+    enablePush: true, // requests permission + handles VIP push via SW
   });
 
-  // Refresh list on ticket_updated (dispatched as CustomEvent on window)
+  // Refresh list on ticket_updated
   useEffect(() => {
     const handler = () => fetchConversations();
     window.addEventListener("live:ticket_updated", handler);
     return () => window.removeEventListener("live:ticket_updated", handler);
   }, [fetchConversations]);
+
+  // B.9: Register presence heartbeat when a conversation is selected
+  useEffect(() => {
+    const sendPresence = async (convId: string | null) => {
+      try {
+        await fetch("/api/chat/presence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ convId }),
+        });
+      } catch {}
+    };
+
+    sendPresence(selectedId);
+    if (!selectedId) return;
+
+    const interval = setInterval(() => sendPresence(selectedId), 30_000);
+    return () => {
+      clearInterval(interval);
+      // Clear presence on unmount / deselect
+      sendPresence(null);
+    };
+  }, [selectedId]);
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -87,7 +119,10 @@ export function ChatShell() {
         <div className="px-3 py-2.5 border-b border-border">
           <h2 className="text-[13px] font-bold">Contexto</h2>
         </div>
-        <ConversationContext conversation={selectedConversation} />
+        <ConversationContext
+          conversation={selectedConversation}
+          onAssigned={fetchConversations}
+        />
       </div>
     </div>
   );

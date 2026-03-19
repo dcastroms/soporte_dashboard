@@ -52,120 +52,144 @@
   --color-critical: var(--critical);
 }
 
-:root {
-  --radius: 0.25rem;
-  
-  /* Air Traffic Control Palette (Light Mode - Crisp and High Contrast) */
-  --background: oklch(0.98 0 0); /* #FAFAFA approx */
-  --foreground: oklch(0.22 0.02 245); /* #14171E */
-  
-  --card: oklch(1 0 0); /* White */
-  --card-foreground: oklch(0.22 0.02 245);
-  
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.02 245);
-  
-  --primary: oklch(0.65 0.20 135); /* Darker Lime Green for light mode */
-  --primary-foreground: oklch(0.98 0 0);
-  
-  --secondary: oklch(0.45 0.04 250); /* Darker cool gray for readable text-secondary */
-  --secondary-foreground: oklch(0.98 0 0);
-  
-  --muted: oklch(0.96 0.02 245);
-  --muted-foreground: oklch(0.35 0.02 245); /* Darker gray for readability */
-  
-  --accent: oklch(0.94 0.02 245);
-  --accent-foreground: oklch(0.22 0.02 245);
-  
-  --destructive: oklch(0.60 0.20 25); /* #EF4444 */
-  
-  --border: oklch(0.94 0.02 245); 
-  --input: oklch(0.94 0.02 245);
-  --ring: oklch(0.60 0.15 250); 
-  
-  --chart-1: var(--primary);
-  --chart-2: oklch(0.75 0.18 80);
-  --chart-3: oklch(0.65 0.15 150);
-  --chart-4: oklch(0.40 0.15 250);
-  --chart-5: oklch(0.55 0.02 245);
-  
-  --sidebar: oklch(0.98 0 0);
-  --sidebar-foreground: oklch(0.22 0.02 245);
-  --sidebar-primary: oklch(0.60 0.15 250);
-  --sidebar-primary-foreground: oklch(0.98 0 0);
-  --sidebar-accent: oklch(0.94 0.02 245);
-  --sidebar-accent-foreground: oklch(0.22 0.02 245);
-  --sidebar-border: oklch(0.90 0.02 245);
-  --sidebar-ring: oklch(0.60 0.15 250);
+/* ============================================================
+   SOPORTE 360 — STITCH DESIGN SYSTEM
+   Primary: #7bd21e (Lime Green)
+   Mode: Dark-first (Stitch "diseño-alternativo")
+   Roundness: 8px
+   Font: Inter
+   ============================================================ */
 
-  --success: oklch(0.65 0.15 150);
-  --success-foreground: oklch(0.98 0 0);
-  --warning: oklch(0.75 0.18 80);
-  --warning-foreground: oklch(0.22 0.02 245);
-  --info: var(--primary);
-  --info-foreground: oklch(0.98 0 0);
-  
-  /* Air traffic semantics */
-  --signal: oklch(0.60 0.15 250);
-  --alert: oklch(0.75 0.18 80);
-  --critical: oklch(0.60 0.20 25);
+:root {
+  --radius: 0.5rem; /* 8px — Stitch round-eight */
+
+  /* Light Mode — professional neutral base */
+  --background: oklch(0.97 0 0);
+  --foreground: oklch(0.14 0.015 250);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.14 0.015 250);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.14 0.015 250);
+
+  /* Primary: #7bd21e — Stitch lime green */
+  --primary: oklch(0.76 0.23 130);
+  --primary-foreground: oklch(0.10 0 0);
+
+  --secondary: oklch(0.42 0.04 255);
+  --secondary-foreground: oklch(0.97 0 0);
+
+  --muted: oklch(0.95 0.01 250);
+  --muted-foreground: oklch(0.42 0.02 250);
+
+  --accent: oklch(0.93 0.02 250);
+  --accent-foreground: oklch(0.14 0.015 250);
+
+  --destructive: oklch(0.58 0.22 25);
+
+  --border: oklch(0.91 0.01 250);
+  --input: oklch(0.93 0.01 250);
+  --ring: oklch(0.76 0.23 130);
+
+  --chart-1: oklch(0.76 0.23 130);   /* lime green */
+  --chart-2: oklch(0.75 0.18 80);    /* amber */
+  --chart-3: oklch(0.65 0.15 150);   /* teal */
+  --chart-4: oklch(0.42 0.15 255);   /* blue */
+  --chart-5: oklch(0.58 0.22 25);    /* red */
+
+  --sidebar: oklch(0.97 0 0);
+  --sidebar-foreground: oklch(0.14 0.015 250);
+  --sidebar-primary: oklch(0.76 0.23 130);
+  --sidebar-primary-foreground: oklch(0.10 0 0);
+  --sidebar-accent: oklch(0.93 0.02 250);
+  --sidebar-accent-foreground: oklch(0.14 0.015 250);
+  --sidebar-border: oklch(0.91 0.01 250);
+  --sidebar-ring: oklch(0.76 0.23 130);
+
+  --success: oklch(0.76 0.23 130);
+  --success-foreground: oklch(0.10 0 0);
+  --warning: oklch(0.82 0.19 80);
+  --warning-foreground: oklch(0.10 0 0);
+  --info: oklch(0.55 0.18 255);
+  --info-foreground: oklch(0.97 0 0);
+
+  --signal: oklch(0.76 0.23 130);
+  --alert: oklch(0.82 0.19 80);
+  --critical: oklch(0.58 0.22 25);
 }
 
 .dark {
-  /* Mediastream 360 Reference Palette (Dark Mode) */
-  --background: oklch(0.20 0.02 250); /* #12151D approx */
-  --foreground: oklch(0.98 0 0); /* #F8FAFC */
-  
-  --card: oklch(0.25 0.02 250); /* #1A1D27 approx */
-  --card-foreground: oklch(0.98 0 0);
-  
-  --popover: oklch(0.25 0.02 250); 
-  --popover-foreground: oklch(0.98 0 0);
-  
-  --primary: oklch(0.80 0.20 135); /* #89D115 Lime Green approx */
-  --primary-foreground: oklch(0.20 0.02 250); /* Dark text on green */
-  
-  --secondary: oklch(0.32 0.02 250); /* Slightly lighter than card */
-  --secondary-foreground: oklch(0.98 0 0);
-  
-  --muted: oklch(0.30 0.02 250);
-  --muted-foreground: oklch(0.65 0.02 250); /* #8B98A9 approx */
-  
-  --accent: oklch(0.35 0.02 250);
-  --accent-foreground: oklch(0.98 0 0);
-  
-  --destructive: oklch(0.60 0.20 25); /* #EF4444 */
-  
-  --border: oklch(0.32 0.02 250); /* #252A36 border color */
-  --input: oklch(0.32 0.02 250);
-  --ring: oklch(0.80 0.20 135); 
-  
-  --chart-1: var(--primary);
-  --chart-2: oklch(0.75 0.18 80);
-  --chart-3: oklch(0.65 0.15 150);
-  --chart-4: oklch(0.40 0.15 250);
-  --chart-5: oklch(0.55 0.02 245);
-  
-  --sidebar: oklch(0.18 0.02 250); /* Slightly darker than background */
-  --sidebar-foreground: oklch(0.98 0 0);
-  --sidebar-primary: oklch(0.80 0.20 135);
-  --sidebar-primary-foreground: oklch(0.20 0.02 250);
-  --sidebar-accent: oklch(0.25 0.02 250);
-  --sidebar-accent-foreground: oklch(0.98 0 0);
-  --sidebar-border: oklch(0.25 0.02 250);
-  --sidebar-ring: oklch(0.80 0.20 135);
+  /* ============================================================
+     STITCH DARK DESIGN — "Soporte 360 - Vista General"
+     Background: #0a0a0e (near-black with slight blue tint)
+     Cards: #111118
+     Border: #1e1e2a
+     Primary: #7bd21e (lime green)
+     ============================================================ */
 
-  --success: oklch(0.80 0.20 135); /* Same as primary */
-  --success-foreground: oklch(0.20 0.02 250);
-  --warning: oklch(0.85 0.18 80); /* Bright yellow/orange */
-  --warning-foreground: oklch(0.20 0.02 250);
-  --info: oklch(0.60 0.15 250);
-  --info-foreground: oklch(0.98 0 0);
-  
-  /* Air traffic semantics */
-  --signal: oklch(0.60 0.15 250);
-  --alert: oklch(0.75 0.18 80);
-  --critical: oklch(0.60 0.20 25);
+  /* Deep near-black background */
+  --background: oklch(0.10 0.015 260);    /* ~#0a0a0e */
+  --foreground: oklch(0.96 0 0);          /* near-white */
+
+  /* Card: very dark charcoal */
+  --card: oklch(0.14 0.015 260);          /* ~#111118 */
+  --card-foreground: oklch(0.96 0 0);
+
+  --popover: oklch(0.14 0.015 260);
+  --popover-foreground: oklch(0.96 0 0);
+
+  /* Primary: #7bd21e — Stitch lime green */
+  --primary: oklch(0.79 0.23 130);
+  --primary-foreground: oklch(0.08 0 0);
+
+  /* Secondary: blue-purple accent */
+  --secondary: oklch(0.38 0.08 260);
+  --secondary-foreground: oklch(0.96 0 0);
+
+  /* Muted: subtle dark surface */
+  --muted: oklch(0.18 0.015 260);         /* ~#181822 */
+  --muted-foreground: oklch(0.58 0.02 260); /* ~#7a8090 */
+
+  /* Accent: slightly lighter than card */
+  --accent: oklch(0.20 0.015 260);        /* ~#1a1a24 */
+  --accent-foreground: oklch(0.96 0 0);
+
+  --destructive: oklch(0.60 0.22 25);     /* red */
+
+  /* Borders: very subtle */
+  --border: oklch(0.20 0.015 260);        /* ~#1e1e2a */
+  --input: oklch(0.18 0.015 260);
+  --ring: oklch(0.79 0.23 130);           /* lime ring */
+
+  /* Charts */
+  --chart-1: oklch(0.79 0.23 130);        /* lime green */
+  --chart-2: oklch(0.82 0.19 80);         /* amber */
+  --chart-3: oklch(0.65 0.15 150);        /* teal */
+  --chart-4: oklch(0.55 0.18 255);        /* blue */
+  --chart-5: oklch(0.60 0.22 25);         /* red */
+
+  /* Sidebar: even darker than background */
+  --sidebar: oklch(0.08 0.015 260);       /* ~#070710 */
+  --sidebar-foreground: oklch(0.72 0.02 260);
+  --sidebar-primary: oklch(0.79 0.23 130);
+  --sidebar-primary-foreground: oklch(0.08 0 0);
+  --sidebar-accent: oklch(0.16 0.015 260);
+  --sidebar-accent-foreground: oklch(0.96 0 0);
+  --sidebar-border: oklch(0.16 0.015 260);
+  --sidebar-ring: oklch(0.79 0.23 130);
+
+  /* Semantic */
+  --success: oklch(0.79 0.23 130);
+  --success-foreground: oklch(0.08 0 0);
+  --warning: oklch(0.82 0.19 80);
+  --warning-foreground: oklch(0.08 0 0);
+  --info: oklch(0.55 0.18 255);
+  --info-foreground: oklch(0.96 0 0);
+
+  --signal: oklch(0.79 0.23 130);
+  --alert: oklch(0.82 0.19 80);
+  --critical: oklch(0.60 0.22 25);
 }
 
 @layer base {
@@ -185,7 +209,7 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  
+
   .scrollbar-thin::-webkit-scrollbar {
     width: 4px;
     height: 4px;
@@ -207,6 +231,7 @@
     @apply h-full bg-primary rounded-full transition-all duration-500;
   }
 
+  /* Stitch-style rounded pill button */
   .btn-primary-rounded {
     @apply bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-6 rounded-full inline-flex items-center gap-2 transition-all shadow-sm active:scale-[0.98];
   }
@@ -214,8 +239,16 @@
     @apply bg-secondary hover:bg-secondary/90 text-secondary-foreground font-bold py-2 px-6 rounded-full inline-flex items-center gap-2 transition-all shadow-sm active:scale-[0.98];
   }
 
+  /* Stitch card style — dark glass effect */
   .card-neumorphic {
-    @apply bg-card text-card-foreground rounded-md border border-border shadow-none;
+    @apply bg-card text-card-foreground rounded-lg border border-border shadow-none;
+  }
+
+  /* Stitch card — with subtle glow on hover */
+  .card-stitch {
+    @apply bg-card text-card-foreground rounded-lg border border-border
+           hover:border-primary/30 hover:shadow-[0_0_20px_rgba(123,210,30,0.08)]
+           transition-all duration-300;
   }
 
   .page-title {
@@ -223,5 +256,19 @@
   }
   .page-subtitle {
     @apply text-sm text-muted-foreground mt-0.5;
+  }
+
+  /* Stitch active sidebar indicator */
+  .sidebar-item-active {
+    @apply relative;
+  }
+  .sidebar-item-active::before {
+    content: '';
+    @apply absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-primary rounded-r-full;
+  }
+
+  /* Stitch lime green glow for key metrics */
+  .metric-glow {
+    text-shadow: 0 0 20px rgba(123, 210, 30, 0.4);
   }
 }

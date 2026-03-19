@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 // Removed Card import for borderless telemetry strip design
 import {
     Tooltip,
@@ -20,7 +21,7 @@ interface KpiCardProps {
 
 import { TrendingUp, TrendingDown } from "lucide-react";
 
-export function KpiCard({ label, value, description, sparkline, info, trend }: KpiCardProps) {
+export const KpiCard = memo(function KpiCard({ label, value, description, sparkline, info, trend }: KpiCardProps) {
     const isPositive = trend && trend > 0;
     const isNegative = trend && trend < 0;
 
@@ -65,4 +66,4 @@ export function KpiCard({ label, value, description, sparkline, info, trend }: K
             </div>
         </div>
     );
-}
+});

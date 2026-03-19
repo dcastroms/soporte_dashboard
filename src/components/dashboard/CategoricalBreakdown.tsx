@@ -9,6 +9,7 @@ interface CategoryMetric {
     category: string;
     value: string;
     count: number;
+    [key: string]: unknown;
 }
 
 export function CategoricalBreakdown({ data }: { data: CategoryMetric[] }) {

@@ -16,8 +16,6 @@ export const config = {
     "/roadmap/:path*",
     "/tracking/:path*",
     "/backlog/:path*",
-    "/logs/:path*",
-    "/automations/:path*",
     "/shifts/:path*",
     "/handovers/:path*",
     "/account/:path*",

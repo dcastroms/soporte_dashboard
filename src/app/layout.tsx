@@ -25,8 +25,8 @@ export default function RootLayout({
         <AuthProvider>
           <ThemeProvider
             attribute="class"
-            defaultTheme="system"
-            enableSystem={true}
+            defaultTheme="dark"
+            enableSystem={false}
             disableTransitionOnChange
           >
             <div className="h-[2px] w-full bg-signal transition-colors duration-1000 z-50 sticky top-0" id="pulse-bar" />

@@ -1,16 +1,43 @@
 "use client";
 
+import { useState } from "react";
 import { ChatConversation } from "@/types/chat";
-import { Star, User, Tag, Clock, ExternalLink } from "lucide-react";
+import { Star, User, Tag, Clock, ExternalLink, UserCheck, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
 interface Props {
   conversation: ChatConversation | null;
+  onAssigned?: () => void;
 }
 
-export function ConversationContext({ conversation }: Props) {
+export function ConversationContext({ conversation, onAssigned }: Props) {
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+
+  const handleAssign = async () => {
+    if (!conversation) return;
+    setAssigning(true);
+    setAssignError(null);
+    try {
+      const resp = await fetch(`/api/chat/conversations/${conversation.id}/assign`, {
+        method: "POST",
+      });
+      if (!resp.ok) {
+        const data = await resp.json();
+        setAssignError(data.error || "Error al asignar");
+      } else {
+        onAssigned?.();
+      }
+    } catch {
+      setAssignError("Error de conexión");
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   if (!conversation) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground p-4">
@@ -31,6 +58,38 @@ export function ConversationContext({ conversation }: Props) {
         </div>
       )}
 
+      {/* B.12: Take/Assign conversation */}
+      <div className="space-y-1.5">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+          Asignación
+        </p>
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
+            <span className="text-[8px] font-black text-primary">
+              {conversation.assignee.charAt(0)}
+            </span>
+          </div>
+          <span className="font-medium flex-1">{conversation.assignee}</span>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 w-full text-[11px] gap-1.5"
+          onClick={handleAssign}
+          disabled={assigning}
+        >
+          {assigning ? (
+            <Loader2 size={11} className="animate-spin" />
+          ) : (
+            <UserCheck size={11} />
+          )}
+          Tomar conversación
+        </Button>
+        {assignError && (
+          <p className="text-[10px] text-destructive">{assignError}</p>
+        )}
+      </div>
+
       {/* Client */}
       <div className="space-y-1.5">
         <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -39,21 +98,6 @@ export function ConversationContext({ conversation }: Props) {
         <div className="flex items-center gap-2">
           <User size={13} className="text-muted-foreground shrink-0" />
           <span className="font-medium">{conversation.client || "Desconocido"}</span>
-        </div>
-      </div>
-
-      {/* Assignee */}
-      <div className="space-y-1.5">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-          Asignado a
-        </p>
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
-            <span className="text-[8px] font-black text-primary">
-              {conversation.assignee.charAt(0)}
-            </span>
-          </div>
-          <span className="font-medium">{conversation.assignee}</span>
         </div>
       </div>
 
