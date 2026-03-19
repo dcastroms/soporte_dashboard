@@ -71,7 +71,7 @@ async function embedVoyage(text: string): Promise<number[]> {
   return data.data?.[0]?.embedding as number[];
 }
 
-async function embedJina(text: string, task: string = "retrieval.passage"): Promise<number[]> {
+async function embedJina(text: string, task: string = "retrieval.passage", attempt = 0): Promise<number[]> {
   const resp = await fetch("https://api.jina.ai/v1/embeddings", {
     method: "POST",
     headers: {
@@ -87,6 +87,12 @@ async function embedJina(text: string, task: string = "retrieval.passage"): Prom
 
   if (!resp.ok) {
     const err = await resp.text();
+    // Retry on concurrency limit (429) up to 3 times with exponential backoff
+    if (resp.status === 429 && attempt < 3) {
+      const wait = (attempt + 1) * 1500;
+      await new Promise((r) => setTimeout(r, wait));
+      return embedJina(text, task, attempt + 1);
+    }
     throw new Error(`Jina embedding error ${resp.status}: ${err}`);
   }
 

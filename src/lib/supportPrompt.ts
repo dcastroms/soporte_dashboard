@@ -22,13 +22,14 @@ export function buildSuggestMessages(
   customSystemPrompt?: string
 ): import("@/lib/aiProvider").AIMessage[] {
 
-  const finalUserContent = knowledgeContext
-    ? `DOCUMENTACIÓN OFICIAL — usa ÚNICAMENTE la información de abajo. Si algo no está aquí, NO lo incluyas en tu respuesta:\n\n${knowledgeContext}\n\n---\nRedacta la respuesta al cliente usando SOLO lo documentado arriba. Reglas estrictas:\n- Sin saludos. Sin despedidas. Sin preguntas de cierre.\n- NO inventes valores, ejemplos, ni restricciones que no estén en la documentación.\n- Si la documentación muestra un ejemplo de URL o parámetro, puedes citarlo. Si no lo muestra, no lo pongas.\n- Texto plano, sin markdown, sin bloques de código.`
-    : "No tienes documentación disponible. Responde ÚNICAMENTE con: \"Voy a revisar esto con el equipo técnico y te confirmo a la brevedad.\"";
+  const baseSystem = customSystemPrompt ?? SUPPORT_SYSTEM_PROMPT;
+
+  const systemContent = knowledgeContext
+    ? `${baseSystem}\n\n---\nDOCUMENTACIÓN OFICIAL — usa ÚNICAMENTE la información de abajo para responder. Si algo no está aquí, NO lo incluyas:\n\n${knowledgeContext}`
+    : `${baseSystem}\n\n---\nNo tienes documentación disponible. Responde ÚNICAMENTE con: "Voy a revisar esto con el equipo técnico y te confirmo a la brevedad."`;
 
   return [
-    { role: "system", content: customSystemPrompt ?? SUPPORT_SYSTEM_PROMPT },
+    { role: "system", content: systemContent },
     ...conversationHistory,
-    { role: "user", content: finalUserContent },
   ];
 }

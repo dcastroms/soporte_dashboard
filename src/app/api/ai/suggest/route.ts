@@ -45,7 +45,10 @@ export async function POST(req: NextRequest) {
   // A.9: RAG — find relevant knowledge chunks for the last user message
   let knowledgeContext: string | undefined;
   try {
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+    // Skip auto-generated Intercom system messages (e.g. "Las respuestas te llegarán aquí...")
+    const lastUserMsg = [...messages].reverse().find(
+      (m) => m.role === "user" && m.content.length > 10 && !m.content.includes("te llegarán") && !m.content.includes("correo electrónico")
+    );
     if (lastUserMsg) {
       const allChunks = await prisma.knowledgeChunk.findMany({
         select: { text: true, embedding: true },
