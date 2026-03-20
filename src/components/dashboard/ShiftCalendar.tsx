@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -14,10 +13,10 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
+  Sheet, SheetContent, SheetTrigger,
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
-import { X, ChevronLeft, ChevronRight, SlidersHorizontal, Trash2 } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, SlidersHorizontal, Trash2, CalendarRange, ClipboardList, Calendar } from "lucide-react";
 import { format, addDays, startOfWeek, eachDayOfInterval, isSameDay, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { GoogleCalendarSettings } from './GoogleCalendarSettings';
@@ -152,11 +151,11 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
 
   const handleMouseUp = () => {
     if (isSelecting && selectionStart && selectionEnd !== null) {
-      const start = Math.min(selectionStart.hour, selectionEnd);
-      const end = Math.max(selectionStart.hour, selectionEnd);
+      const s = Math.min(selectionStart.hour, selectionEnd);
+      const e = Math.max(selectionStart.hour, selectionEnd);
       setSelectedCell({
         date: selectionStart.date,
-        hours: Array.from({ length: end - start + 1 }, (_, i) => start + i),
+        hours: Array.from({ length: e - s + 1 }, (_, i) => s + i),
       });
       setSelectedAgents([]);
       setCustomAgent('');
@@ -230,205 +229,237 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full gap-2">
       <HandoverAlert assignments={assignments} />
 
-      {/* Grid — ocupa todo el espacio disponible */}
-      <div className="flex-1 border border-border rounded-lg overflow-hidden bg-background flex flex-col">
-        <CardContent className="p-0 flex-1 flex flex-col">
-          <ScrollArea className="flex-1 h-[calc(100vh-130px)]">
-            <div
-              className="min-w-[720px]"
-              onMouseLeave={() => { if (isSelecting) handleMouseUp(); }}
-            >
-              {/* Header sticky — nav integrada aquí */}
-              <div className="grid grid-cols-[56px_repeat(7,1fr)_40px] border-b border-border sticky top-0 bg-background z-20">
+      {/* Barra de control — fuera del grid, pequeña y limpia */}
+      <div className="flex items-center justify-between flex-shrink-0">
+        {/* Navegación de semana */}
+        <div className="flex items-center gap-1.5">
+          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCurrentDate(d => addDays(d, -7))}>
+            <ChevronLeft size={13} />
+          </Button>
+          <span className="text-sm font-bold px-1 select-none tabular-nums">
+            {format(startDate, 'dd MMM', { locale: es })} – {format(addDays(startDate, 6), 'dd MMM yyyy', { locale: es })}
+          </span>
+          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCurrentDate(d => addDays(d, 7))}>
+            <ChevronRight size={13} />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => setCurrentDate(new Date())}>
+            Hoy
+          </Button>
+        </div>
 
-                {/* Celda esquina: navegación compacta */}
-                <div className="border-r border-border bg-muted/40 flex flex-col items-center justify-center gap-0.5 p-1">
-                  <button
-                    onClick={() => setCurrentDate(d => addDays(d, -7))}
-                    className="w-5 h-5 rounded flex items-center justify-center hover:bg-muted transition-colors"
-                  >
-                    <ChevronLeft size={12} className="text-muted-foreground" />
-                  </button>
-                  <button
-                    onClick={() => setCurrentDate(new Date())}
-                    className="text-[7px] font-bold text-primary hover:opacity-70 transition-opacity leading-none"
-                  >
-                    HOY
-                  </button>
-                  <button
-                    onClick={() => setCurrentDate(d => addDays(d, 7))}
-                    className="w-5 h-5 rounded flex items-center justify-center hover:bg-muted transition-colors"
-                  >
-                    <ChevronRight size={12} className="text-muted-foreground" />
-                  </button>
+        {/* Ícono de opciones — separado visualmente del grid */}
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+              <SlidersHorizontal size={14} />
+            </Button>
+          </SheetTrigger>
+
+          <SheetContent side="right" className="w-[260px] p-0 flex flex-col">
+            {/* Header del panel — igual estilo al sidebar */}
+            <div className="px-4 py-5 border-b border-sidebar-border">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 bg-primary/15 rounded-lg flex items-center justify-center shrink-0 border border-primary/25">
+                  <CalendarRange size={13} className="text-primary" />
                 </div>
-
-                {/* Días */}
-                {weekDays.map((day: Date) => {
-                  const todayCol = isToday(day);
-                  return (
-                    <div key={day.toString()} className={cn(
-                      "p-2 text-center border-r border-border last:border-r-0",
-                      todayCol && "bg-primary/5 border-b-2 border-b-primary"
-                    )}>
-                      <div className="text-[9px] uppercase font-semibold text-muted-foreground">
-                        {format(day, 'eee', { locale: es })}
-                      </div>
-                      <div className={cn("text-sm font-bold mt-0.5", todayCol ? "text-primary" : "text-foreground")}>
-                        {format(day, 'dd')}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Ícono de menú (último col) */}
-                <div className="flex items-center justify-center border-l border-border bg-muted/20">
-                  <Sheet>
-                    <SheetTrigger asChild>
-                      <button className="w-7 h-7 rounded flex items-center justify-center hover:bg-muted transition-colors">
-                        <SlidersHorizontal size={13} className="text-muted-foreground" />
-                      </button>
-                    </SheetTrigger>
-                    <SheetContent side="right" className="w-[300px] flex flex-col gap-5">
-                      <SheetHeader>
-                        <SheetTitle className="text-sm">Opciones de turno</SheetTitle>
-                      </SheetHeader>
-
-                      {/* Semana actual */}
-                      <div>
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Semana visible</p>
-                        <p className="text-sm font-semibold">
-                          {format(startDate, "dd 'de' MMM", { locale: es })} – {format(addDays(startDate, 6), "dd 'de' MMM yyyy", { locale: es })}
-                        </p>
-                      </div>
-
-                      {/* Carga semanal */}
-                      {Object.keys(weeklySummary).length > 0 && (
-                        <div>
-                          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Carga semanal</p>
-                          <div className="flex flex-col gap-1.5">
-                            {Object.entries(weeklySummary)
-                              .sort((a, b) => b[1] - a[1])
-                              .map(([name, hrs]) => {
-                                const colorClass = AGENT_COLOR_CLASSES[getAgentColor(name)];
-                                const isOver = hrs > OVERLOAD_HOURS;
-                                return (
-                                  <div key={name} className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <div className={cn("w-2 h-2 rounded-full border flex-shrink-0", colorClass)} />
-                                      <span className="text-xs font-medium truncate">{name}</span>
-                                    </div>
-                                    <Badge
-                                      variant="outline"
-                                      className={cn(
-                                        "text-[10px] font-bold shrink-0",
-                                        isOver ? "bg-red-500/15 text-red-500 border-red-500/40" : colorClass
-                                      )}
-                                    >
-                                      {hrs}h {isOver && "⚠"}
-                                    </Badge>
-                                  </div>
-                                );
-                              })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Separador */}
-                      <div className="h-px bg-border" />
-
-                      {/* Acciones */}
-                      <div className="flex flex-col gap-2">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Acciones</p>
-
-                        <HandoverDialog assignments={weekAssignments} />
-
-                        {session?.user && (
-                          <GoogleCalendarSettings assignmentsInView={weekAssignments} />
-                        )}
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full justify-start gap-2 text-destructive hover:text-destructive border-destructive/30"
-                          onClick={() => setClearOpen(true)}
-                        >
-                          <Trash2 size={13} />
-                          Limpiar semana
-                        </Button>
-                      </div>
-                    </SheetContent>
-                  </Sheet>
+                <div>
+                  <p className="text-[11px] font-black text-foreground/80 leading-none tracking-wide">TURNOS</p>
+                  <p className="text-[9px] font-bold text-primary uppercase tracking-[0.18em] mt-0.5">
+                    {format(startDate, 'dd MMM', { locale: es })} – {format(addDays(startDate, 6), 'dd MMM', { locale: es })}
+                  </p>
                 </div>
-              </div>
-
-              {/* Filas de horas */}
-              <div className="divide-y divide-border">
-                {hours.map(hour => (
-                  <div key={hour} className="grid grid-cols-[56px_repeat(7,1fr)_40px] h-[40px]">
-                    <div className="border-r border-border flex items-center justify-center bg-muted/10">
-                      <span className="text-[9px] font-mono text-muted-foreground">{String(hour).padStart(2, '0')}h</span>
-                    </div>
-                    {weekDays.map((day: Date) => {
-                      const cellAssignments = getAssignmentsForCell(day, hour);
-                      const isSelected = isCellSelected(day, hour);
-                      const todayCol = isToday(day);
-                      return (
-                        <div
-                          key={day.toString() + hour}
-                          className={cn(
-                            "border-r border-border last:border-r-0 relative select-none overflow-hidden cursor-crosshair",
-                            todayCol && "bg-primary/[0.02]",
-                            isSelected && "bg-primary/20 ring-inset ring-1 ring-primary/40",
-                            !isSelected && "hover:bg-primary/5"
-                          )}
-                          onMouseDown={() => handleMouseDown(day, hour)}
-                          onMouseEnter={() => handleMouseEnter(hour)}
-                          onMouseUp={handleMouseUp}
-                        >
-                          {cellAssignments.length > 0 && (
-                            <div className="flex gap-px p-px h-full items-center flex-wrap">
-                              {cellAssignments.map(assignment => {
-                                const colorClass = AGENT_COLOR_CLASSES[getAgentColor(assignment.agentName)] || AGENT_COLOR_CLASSES[COLOR_PALETTE[0]];
-                                const firstName = assignment.agentName.split(' ')[0];
-                                return (
-                                  <div
-                                    key={assignment.id}
-                                    className={cn(
-                                      "flex items-center gap-0.5 px-1 rounded text-[9px] font-semibold border h-5 max-w-full",
-                                      colorClass
-                                    )}
-                                    onMouseDown={e => e.stopPropagation()}
-                                  >
-                                    <span className="truncate">{firstName}</span>
-                                    <button
-                                      className="opacity-50 hover:opacity-100 transition-opacity flex-shrink-0"
-                                      onClick={e => handleDeleteAssignment(assignment.id, e)}
-                                    >
-                                      <X size={8} />
-                                    </button>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {/* Celda vacía columna menú */}
-                    <div className="border-l border-border bg-muted/10" />
-                  </div>
-                ))}
               </div>
             </div>
-          </ScrollArea>
-        </CardContent>
+
+            <nav className="flex-1 px-2 py-3 overflow-y-auto space-y-4">
+
+              {/* Sección: Carga semanal */}
+              {Object.keys(weeklySummary).length > 0 && (
+                <div>
+                  <p className="px-2 mb-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-foreground/35 select-none">
+                    Carga Semanal
+                  </p>
+                  <div className="space-y-0.5">
+                    {Object.entries(weeklySummary)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([name, hrs]) => {
+                        const colorClass = AGENT_COLOR_CLASSES[getAgentColor(name)];
+                        const isOver = hrs > OVERLOAD_HOURS;
+                        return (
+                          <div
+                            key={name}
+                            className="flex items-center justify-between gap-2 pl-3.5 pr-2 py-1.5 rounded-lg"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className={cn("w-2 h-2 rounded-full border flex-shrink-0", colorClass)} />
+                              <span className="text-[12px] font-medium truncate">{name}</span>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] font-bold shrink-0 h-5",
+                                isOver ? "bg-red-500/15 text-red-500 border-red-500/40" : colorClass
+                              )}
+                            >
+                              {hrs}h{isOver && " ⚠"}
+                            </Badge>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* Sección: Operaciones */}
+              <div>
+                <p className="px-2 mb-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-foreground/35 select-none">
+                  Operaciones
+                </p>
+                <ul className="space-y-0.5">
+                  <li>
+                    <HandoverDialog
+                      assignments={weekAssignments}
+                      customTrigger={
+                        <button className="flex items-center gap-2.5 pl-3.5 pr-2 py-2 rounded-lg w-full text-left transition-all duration-150 text-[12px] font-medium text-foreground/60 hover:bg-accent/60 hover:text-foreground group">
+                          <ClipboardList size={15} className="shrink-0 text-foreground/40 group-hover:text-foreground/80 transition-colors" />
+                          <span>Entrega de Turno</span>
+                        </button>
+                      }
+                    />
+                  </li>
+                  {session?.user && (
+                    <li>
+                      <GoogleCalendarSettings
+                        assignmentsInView={weekAssignments}
+                        trigger={
+                          <button className="flex items-center gap-2.5 pl-3.5 pr-2 py-2 rounded-lg w-full text-left transition-all duration-150 text-[12px] font-medium text-foreground/60 hover:bg-accent/60 hover:text-foreground group">
+                            <Calendar size={15} className="shrink-0 text-foreground/40 group-hover:text-foreground/80 transition-colors" />
+                            <span>Google Calendar</span>
+                          </button>
+                        }
+                      />
+                    </li>
+                  )}
+                </ul>
+              </div>
+
+              {/* Sección: Acciones */}
+              <div>
+                <p className="px-2 mb-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-foreground/35 select-none">
+                  Acciones
+                </p>
+                <ul className="space-y-0.5">
+                  <li>
+                    <button
+                      onClick={() => setClearOpen(true)}
+                      className="flex items-center gap-2.5 pl-3.5 pr-2 py-2 rounded-lg w-full text-left transition-all duration-150 text-[12px] font-medium text-destructive/70 hover:bg-destructive/10 hover:text-destructive group"
+                    >
+                      <Trash2 size={15} className="shrink-0" />
+                      <span>Limpiar semana</span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
+
+            </nav>
+          </SheetContent>
+        </Sheet>
       </div>
 
-      {/* AlertDialog limpiar semana (controlado desde el Sheet) */}
+      {/* Grid — ocupa toda la altura restante */}
+      <div className="flex-1 border border-border rounded-lg overflow-hidden bg-background min-h-0">
+        <ScrollArea className="h-[calc(100vh-148px)]">
+          <div
+            className="min-w-[700px]"
+            onMouseLeave={() => { if (isSelecting) handleMouseUp(); }}
+          >
+            {/* Header días */}
+            <div className="grid grid-cols-[48px_repeat(7,1fr)] border-b border-border sticky top-0 bg-background z-20">
+              <div className="p-2 border-r border-border bg-muted/40 flex items-center justify-center">
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">H</span>
+              </div>
+              {weekDays.map((day: Date) => {
+                const todayCol = isToday(day);
+                return (
+                  <div key={day.toString()} className={cn(
+                    "p-2 text-center border-r border-border last:border-r-0",
+                    todayCol && "bg-primary/5 border-b-2 border-b-primary"
+                  )}>
+                    <div className="text-[9px] uppercase font-semibold text-muted-foreground">
+                      {format(day, 'eee', { locale: es })}
+                    </div>
+                    <div className={cn("text-sm font-bold mt-0.5", todayCol ? "text-primary" : "text-foreground")}>
+                      {format(day, 'dd')}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Filas de horas */}
+            <div className="divide-y divide-border">
+              {hours.map(hour => (
+                <div key={hour} className="grid grid-cols-[48px_repeat(7,1fr)] h-[40px]">
+                  <div className="border-r border-border flex items-center justify-center bg-muted/10">
+                    <span className="text-[9px] font-mono text-muted-foreground">{String(hour).padStart(2, '0')}h</span>
+                  </div>
+                  {weekDays.map((day: Date) => {
+                    const cellAssignments = getAssignmentsForCell(day, hour);
+                    const isSelected = isCellSelected(day, hour);
+                    const todayCol = isToday(day);
+                    return (
+                      <div
+                        key={day.toString() + hour}
+                        className={cn(
+                          "border-r border-border last:border-r-0 relative select-none overflow-hidden cursor-crosshair",
+                          todayCol && "bg-primary/[0.02]",
+                          isSelected && "bg-primary/20 ring-inset ring-1 ring-primary/40",
+                          !isSelected && "hover:bg-primary/5"
+                        )}
+                        onMouseDown={() => handleMouseDown(day, hour)}
+                        onMouseEnter={() => handleMouseEnter(hour)}
+                        onMouseUp={handleMouseUp}
+                      >
+                        {cellAssignments.length > 0 && (
+                          <div className="flex gap-px p-px h-full items-center flex-wrap">
+                            {cellAssignments.map(assignment => {
+                              const colorClass = AGENT_COLOR_CLASSES[getAgentColor(assignment.agentName)] || AGENT_COLOR_CLASSES[COLOR_PALETTE[0]];
+                              const firstName = assignment.agentName.split(' ')[0];
+                              return (
+                                <div
+                                  key={assignment.id}
+                                  className={cn(
+                                    "flex items-center gap-0.5 px-1 rounded text-[9px] font-semibold border h-5 max-w-full",
+                                    colorClass
+                                  )}
+                                  onMouseDown={e => e.stopPropagation()}
+                                >
+                                  <span className="truncate">{firstName}</span>
+                                  <button
+                                    className="opacity-50 hover:opacity-100 transition-opacity flex-shrink-0"
+                                    onClick={e => handleDeleteAssignment(assignment.id, e)}
+                                  >
+                                    <X size={8} />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </ScrollArea>
+      </div>
+
+      {/* AlertDialog limpiar */}
       <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -449,7 +480,7 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Diálogo de asignación */}
+      {/* Diálogo asignación */}
       <Dialog
         open={isDialogOpen}
         onOpenChange={open => {
@@ -471,7 +502,6 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
               )}
             </DialogDescription>
           </DialogHeader>
-
           <div className="py-3 space-y-3">
             {users.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
@@ -504,7 +534,6 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
               className="h-8 text-sm"
             />
           </div>
-
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
             <Button

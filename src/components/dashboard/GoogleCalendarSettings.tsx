@@ -36,7 +36,7 @@ interface GoogleCalendar {
     primary?: boolean;
 }
 
-export function GoogleCalendarSettings({ assignmentsInView }: { assignmentsInView: any[] }) {
+export function GoogleCalendarSettings({ assignmentsInView, trigger }: { assignmentsInView: any[]; trigger?: React.ReactNode }) {
     const [calendars, setCalendars] = useState<GoogleCalendar[]>([]);
     const [selectedCalendar, setSelectedCalendar] = useState<string>('primary');
     const [customCalendarId, setCustomCalendarId] = useState<string>('c_cniou4ttltdo10qltt6v977ar4@group.calendar.google.com');
@@ -111,7 +111,7 @@ export function GoogleCalendarSettings({ assignmentsInView }: { assignmentsInVie
 
     const isLinked = calendars.length > 0;
 
-    return (
+    const content = (
         <div className="space-y-4">
             {!isLinked && !isLoading && (
                 <div className="p-2 border border-orange-200 bg-orange-50 rounded text-[10px] text-orange-700 flex flex-col gap-2">
@@ -229,4 +229,23 @@ export function GoogleCalendarSettings({ assignmentsInView }: { assignmentsInVie
             </div>
         </div>
     );
+
+    if (trigger) {
+        return (
+            <Dialog>
+                <DialogTrigger asChild>{trigger}</DialogTrigger>
+                <DialogContent className="sm:max-w-[480px]">
+                    <DialogHeader>
+                        <DialogTitle>Google Calendar</DialogTitle>
+                        <DialogDescription>
+                            Sincroniza los turnos de la semana con tu calendario de Google.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-2">{content}</div>
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
+    return content;
 }
