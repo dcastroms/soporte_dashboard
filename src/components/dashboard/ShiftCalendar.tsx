@@ -34,25 +34,31 @@ import { cn } from '@/lib/utils';
 
 const OVERLOAD_HOURS = 40;
 
-const AGENT_COLOR_CLASSES: Record<string, string> = {
-  '#3b82f6': 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30',
-  '#10b981': 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
-  '#f59e0b': 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30',
-  '#8b5cf6': 'bg-violet-500/20 text-violet-600 dark:text-violet-400 border-violet-500/30',
-  '#ef4444': 'bg-red-500/20 text-red-600 dark:text-red-400 border-red-500/30',
-  '#06b6d4': 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border-cyan-500/30',
-  '#ec4899': 'bg-pink-500/20 text-pink-600 dark:text-pink-400 border-pink-500/30',
-  '#f97316': 'bg-orange-500/20 text-orange-600 dark:text-orange-400 border-orange-500/30',
-};
-
-const COLOR_PALETTE = Object.keys(AGENT_COLOR_CLASSES);
+const AGENT_COLORS = [
+  'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30',
+  'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+  'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30',
+  'bg-violet-500/20 text-violet-600 dark:text-violet-400 border-violet-500/30',
+  'bg-rose-500/20 text-rose-600 dark:text-rose-400 border-rose-500/30',
+  'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border-cyan-500/30',
+  'bg-pink-500/20 text-pink-600 dark:text-pink-400 border-pink-500/30',
+  'bg-orange-500/20 text-orange-600 dark:text-orange-400 border-orange-500/30',
+  'bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border-indigo-500/30',
+  'bg-teal-500/20 text-teal-600 dark:text-teal-400 border-teal-500/30',
+  'bg-lime-500/20 text-lime-600 dark:text-lime-400 border-lime-500/30',
+  'bg-fuchsia-500/20 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/30',
+  'bg-sky-500/20 text-sky-600 dark:text-sky-400 border-sky-500/30',
+  'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/30',
+  'bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/30',
+  'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30',
+];
 
 function getAgentColor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return COLOR_PALETTE[Math.abs(hash) % COLOR_PALETTE.length];
+  return AGENT_COLORS[Math.abs(hash) % AGENT_COLORS.length];
 }
 
 interface Assignment {
@@ -377,7 +383,7 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
                     {Object.entries(agentStats)
                       .sort((a, b) => b[1].total - a[1].total)
                       .map(([name, stats]) => {
-                        const colorClass = AGENT_COLOR_CLASSES[getAgentColor(name)];
+                        const colorClass = getAgentColor(name);
                         const isOver = stats.extra > 0;
                         return (
                           <div key={name} className={cn("rounded-lg border p-2", colorClass)}>
@@ -552,7 +558,7 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
 
                     {/* Bloques de agentes */}
                     {blocks.map(block => {
-                      const colorClass = AGENT_COLOR_CLASSES[getAgentColor(block.agentName)] || AGENT_COLOR_CLASSES[COLOR_PALETTE[0]];
+                      const colorClass = getAgentColor(block.agentName);
                       const top = block.startHour * 40 + 2;
                       const height = block.durationHours * 40 - 4;
                       const leftPct = (block.lane / block.totalLanes) * 100;
@@ -647,7 +653,7 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
                 {users.map(user => {
                   const name = user.name || user.email;
                   const isSelected = selectedAgents.includes(name);
-                  const colorClass = AGENT_COLOR_CLASSES[getAgentColor(name)];
+                  const colorClass = getAgentColor(name);
                   return (
                     <button
                       key={user.id}
