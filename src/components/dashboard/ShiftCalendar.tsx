@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -159,37 +158,27 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate.toISOString()]);
 
-  const weeklySummary = useMemo(() => {
-    const startStr = format(startDate, 'yyyy-MM-dd');
-    const endStr = format(addDays(startDate, 6), 'yyyy-MM-dd');
-    return assignments
-      .filter(a => a.date >= startStr && a.date <= endStr)
-      .reduce((acc, curr) => {
-        acc[curr.agentName] = (acc[curr.agentName] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
-  }, [assignments, startDate]);
-
   const weekAssignments = useMemo(() => {
     const start = format(startDate, 'yyyy-MM-dd');
     const end = format(addDays(startDate, 6), 'yyyy-MM-dd');
     return assignments.filter(a => a.date >= start && a.date <= end);
   }, [assignments, startDate]);
 
-  const weeklyStats = useMemo(() => {
+  const agentStats = useMemo(() => {
     const isNocturnal = (hour: number) => hour >= 21 || hour <= 5;
-    let extraHours = 0;
-    Object.values(weeklySummary).forEach(h => { extraHours += Math.max(0, h - OVERLOAD_HOURS); });
-    const nocturnalWeekday = weekAssignments.filter(a => {
+    const result: Record<string, { total: number; extra: number; noctWeekday: number; noctSunday: number }> = {};
+    weekAssignments.forEach(a => {
+      if (!result[a.agentName]) result[a.agentName] = { total: 0, extra: 0, noctWeekday: 0, noctSunday: 0 };
+      result[a.agentName].total++;
       const day = new Date(a.date + 'T12:00:00').getDay();
-      return day !== 0 && isNocturnal(a.hour);
-    }).length;
-    const nocturnalSunday = weekAssignments.filter(a => {
-      const day = new Date(a.date + 'T12:00:00').getDay();
-      return day === 0 && isNocturnal(a.hour);
-    }).length;
-    return { extraHours, nocturnalWeekday, nocturnalSunday };
-  }, [weekAssignments, weeklySummary]);
+      if (isNocturnal(a.hour)) {
+        if (day === 0) result[a.agentName].noctSunday++;
+        else result[a.agentName].noctWeekday++;
+      }
+    });
+    Object.values(result).forEach(s => { s.extra = Math.max(0, s.total - OVERLOAD_HOURS); });
+    return result;
+  }, [weekAssignments]);
 
   const dayLayoutBlocks = useMemo(() => {
     const result: Record<string, LayoutBlock[]> = {};
@@ -351,68 +340,55 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
 
             <nav className="flex-1 px-2 py-3 overflow-y-auto space-y-4">
 
-              {/* Sección: Carga semanal */}
-              {Object.keys(weeklySummary).length > 0 && (
+              {/* Sección: Carga semanal por agente */}
+              {Object.keys(agentStats).length > 0 && (
                 <div>
                   <p className="px-2 mb-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-foreground/35 select-none">
                     Carga Semanal
                   </p>
-                  <div className="space-y-0.5">
-                    {Object.entries(weeklySummary)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([name, hrs]) => {
+                  <div className="space-y-1 px-2">
+                    {Object.entries(agentStats)
+                      .sort((a, b) => b[1].total - a[1].total)
+                      .map(([name, stats]) => {
                         const colorClass = AGENT_COLOR_CLASSES[getAgentColor(name)];
-                        const extra = hrs - OVERLOAD_HOURS;
-                        const isOver = extra > 0;
+                        const isOver = stats.extra > 0;
                         return (
-                          <div
-                            key={name}
-                            className="flex items-center justify-between gap-2 pl-3.5 pr-2 py-1.5 rounded-lg"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className={cn("w-2 h-2 rounded-full border flex-shrink-0", colorClass)} />
-                              <span className="text-[12px] font-medium truncate">{name}</span>
+                          <div key={name} className={cn("rounded-lg border p-2", colorClass)}>
+                            {/* Nombre + total */}
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[12px] font-bold truncate">{name}</span>
+                              <span className={cn(
+                                "text-[11px] font-black tabular-nums",
+                                isOver ? "text-red-500" : ""
+                              )}>
+                                {stats.total}h{isOver ? ` ⚠` : ""}
+                              </span>
                             </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-[10px] font-bold h-5",
-                                  isOver ? "bg-red-500/15 text-red-500 border-red-500/40" : colorClass
-                                )}
-                              >
-                                {hrs}h
-                              </Badge>
+                            {/* Desglose */}
+                            <div className="space-y-0.5">
                               {isOver && (
-                                <Badge variant="outline" className="text-[10px] font-bold h-5 bg-orange-500/10 text-orange-500 border-orange-500/30">
-                                  +{extra} extra
-                                </Badge>
+                                <div className="flex justify-between text-[10px]">
+                                  <span className="opacity-70">Extra</span>
+                                  <span className="font-bold text-orange-500 tabular-nums">+{stats.extra}h</span>
+                                </div>
+                              )}
+                              {stats.noctWeekday > 0 && (
+                                <div className="flex justify-between text-[10px]">
+                                  <span className="opacity-70">Noct. Lun–Sáb</span>
+                                  <span className="font-semibold tabular-nums opacity-80">{stats.noctWeekday}h</span>
+                                </div>
+                              )}
+                              {stats.noctSunday > 0 && (
+                                <div className="flex justify-between text-[10px]">
+                                  <span className="opacity-70">Noct. Dom</span>
+                                  <span className="font-semibold tabular-nums opacity-80">{stats.noctSunday}h</span>
+                                </div>
                               )}
                             </div>
                           </div>
                         );
                       })}
                   </div>
-
-                  {/* Contadores de la semana */}
-                  {weekAssignments.length > 0 && (
-                    <div className="mt-2 mx-2 p-2.5 rounded-lg bg-muted/40 border border-border space-y-1.5">
-                      <div className="flex justify-between text-[11px]">
-                        <span className="text-muted-foreground">Horas extra</span>
-                        <span className={cn("font-bold tabular-nums", weeklyStats.extraHours > 0 ? "text-orange-500" : "text-foreground/60")}>
-                          {weeklyStats.extraHours}h
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[11px]">
-                        <span className="text-muted-foreground">Noct. Lun–Sáb</span>
-                        <span className="font-bold tabular-nums text-foreground/60">{weeklyStats.nocturnalWeekday}h</span>
-                      </div>
-                      <div className="flex justify-between text-[11px]">
-                        <span className="text-muted-foreground">Noct. Domingo</span>
-                        <span className="font-bold tabular-nums text-foreground/60">{weeklyStats.nocturnalSunday}h</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
