@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -15,7 +15,7 @@ import {
   Sheet, SheetContent, SheetTrigger,
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
-import { X, ChevronLeft, ChevronRight, SlidersHorizontal, Trash2, CalendarRange, ClipboardList, Calendar } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, SlidersHorizontal, Trash2, CalendarRange, ClipboardList, Calendar, Camera } from "lucide-react";
 import { format, addDays, startOfWeek, eachDayOfInterval, isSameDay, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { GoogleCalendarSettings } from './GoogleCalendarSettings';
@@ -201,6 +201,23 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
     }
   };
 
+  const gridContentRef = useRef<HTMLDivElement>(null);
+
+  const handleScreenshot = async () => {
+    if (!gridContentRef.current) return;
+    try {
+      const { toPng } = await import('html-to-image');
+      const dataUrl = await toPng(gridContentRef.current, { cacheBust: true });
+      const link = document.createElement('a');
+      link.download = `turnos-${format(startDate, 'yyyy-MM-dd')}.png`;
+      link.href = dataUrl;
+      link.click();
+      toast.success('Imagen descargada');
+    } catch {
+      toast.error('Error al generar la imagen');
+    }
+  };
+
   const handleClearWeek = async () => {
     try {
       const start = format(startDate, 'yyyy-MM-dd');
@@ -313,6 +330,16 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
             Hoy
           </Button>
         </div>
+
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost" size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={handleScreenshot}
+            title="Descargar imagen de la semana"
+          >
+            <Camera size={14} />
+          </Button>
 
         {/* Ícono de opciones — separado visualmente del grid */}
         <Sheet>
@@ -446,12 +473,14 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
             </nav>
           </SheetContent>
         </Sheet>
+        </div>
       </div>
 
       {/* Grid — ocupa toda la altura restante */}
       <div className="flex-1 border border-border rounded-lg overflow-hidden bg-background min-h-0">
         <ScrollArea className="h-full">
           <div
+            ref={gridContentRef}
             className="min-w-[700px]"
             onMouseLeave={() => { if (isSelecting) handleMouseUp(); }}
           >
