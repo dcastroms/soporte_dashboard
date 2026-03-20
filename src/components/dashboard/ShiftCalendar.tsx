@@ -157,7 +157,9 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
   const [assignments, setAssignments] = useState<Assignment[]>(initialAssignments);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedCell, setSelectedCell] = useState<{ date: Date; hours: number[] } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ date: Date } | null>(null);
+  const [dialogFromHour, setDialogFromHour] = useState(0);
+  const [dialogToHour, setDialogToHour] = useState(1);
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
   const [customAgent, setCustomAgent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -455,10 +457,9 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
     if (isSelecting && selectionStart && selectionEnd !== null) {
       const s = Math.min(selectionStart.hour, selectionEnd);
       const e = Math.max(selectionStart.hour, selectionEnd);
-      setSelectedCell({
-        date: selectionStart.date,
-        hours: Array.from({ length: e - s + 1 }, (_, i) => s + i),
-      });
+      setSelectedCell({ date: selectionStart.date });
+      setDialogFromHour(s);
+      setDialogToHour(e + 1);
       setSelectedAgents([]);
       setCustomAgent('');
       setIsDialogOpen(true);
@@ -488,13 +489,15 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
       ? selectedAgents
       : customAgent.trim() ? [customAgent.trim()] : [];
     if (agentsToSave.length === 0) return;
+    const rangeHours = Array.from({ length: dialogToHour - dialogFromHour }, (_, i) => dialogFromHour + i);
+    if (rangeHours.length === 0) return;
 
     setIsSaving(true);
     try {
       const dateStr = format(selectedCell.date, 'yyyy-MM-dd');
       const results = await Promise.allSettled(
         agentsToSave.flatMap(agent =>
-          selectedCell.hours.map(hour =>
+          rangeHours.map(hour =>
             saveSupportAssignment({ date: dateStr, hour, agentName: agent })
           )
         )
@@ -839,18 +842,48 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle>Asignar agente</DialogTitle>
-            <DialogDescription>
-              {selectedCell && (
-                <>
-                  {format(selectedCell.date, "EEEE dd 'de' MMMM", { locale: es })}
-                  {selectedCell.hours.length > 1
-                    ? ` · ${String(selectedCell.hours[0]).padStart(2, '0')}:00 – ${String(selectedCell.hours[selectedCell.hours.length - 1] + 1).padStart(2, '0')}:00`
-                    : ` · ${String(selectedCell.hours[0]).padStart(2, '0')}:00`}
-                </>
-              )}
-            </DialogDescription>
+            {selectedCell && (
+              <DialogDescription>
+                {format(selectedCell.date, "EEEE dd 'de' MMMM", { locale: es })}
+              </DialogDescription>
+            )}
           </DialogHeader>
           <div className="py-3 space-y-3">
+            {/* Selector de rango horario */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Desde</label>
+                <select
+                  value={dialogFromHour}
+                  onChange={e => {
+                    const v = Number(e.target.value);
+                    setDialogFromHour(v);
+                    if (dialogToHour <= v) setDialogToHour(v + 1);
+                  }}
+                  className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
+                  ))}
+                </select>
+              </div>
+              <span className="text-muted-foreground mt-5">–</span>
+              <div className="flex-1">
+                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Hasta</label>
+                <select
+                  value={dialogToHour}
+                  onChange={e => setDialogToHour(Number(e.target.value))}
+                  className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {Array.from({ length: 24 }, (_, i) => i + 1).filter(i => i > dialogFromHour).map(i => (
+                    <option key={i} value={i}>{String(i === 24 ? 0 : i).padStart(2, '0')}:00{i === 24 ? ' (+1d)' : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-5 text-[11px] text-muted-foreground tabular-nums whitespace-nowrap">
+                {dialogToHour - dialogFromHour}h
+              </div>
+            </div>
             {users.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {users.map(user => {
