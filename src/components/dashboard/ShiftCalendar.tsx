@@ -33,7 +33,7 @@ import { toast } from 'sonner';
 import { useSession } from "next-auth/react";
 import { cn } from '@/lib/utils';
 
-const OVERLOAD_HOURS = 45;
+const OVERLOAD_HOURS = 40;
 
 const AGENT_COLOR_CLASSES: Record<string, string> = {
   '#3b82f6': 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30',
@@ -368,6 +368,36 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
           </SheetContent>
         </Sheet>
       </div>
+
+      {/* Barra de agentes — horas semanales */}
+      {Object.keys(weeklySummary).length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
+          {Object.entries(weeklySummary)
+            .sort((a, b) => b[1] - a[1])
+            .map(([name, hrs]) => {
+              const extra = hrs - OVERLOAD_HOURS;
+              const isOver = extra > 0;
+              const colorClass = AGENT_COLOR_CLASSES[getAgentColor(name)];
+              return (
+                <div
+                  key={name}
+                  className={cn(
+                    "flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border select-none",
+                    isOver
+                      ? "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30"
+                      : colorClass
+                  )}
+                >
+                  <span>{name.split(' ')[0]}</span>
+                  <span className="opacity-75">{hrs}h</span>
+                  {isOver && (
+                    <span className="text-[10px] font-bold opacity-90">+{extra} extra</span>
+                  )}
+                </div>
+              );
+            })}
+        </div>
+      )}
 
       {/* Grid — ocupa toda la altura restante */}
       <div className="flex-1 border border-border rounded-lg overflow-hidden bg-background min-h-0">
