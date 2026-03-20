@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -53,12 +53,36 @@ const AGENT_COLORS = [
   'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30',
 ];
 
-function getAgentColor(name: string): string {
+// Colores sólidos para canvas (mismo índice que AGENT_COLORS)
+const CANVAS_COLORS = [
+  { bg: '#bfdbfe', text: '#1d4ed8', border: '#3b82f6' },
+  { bg: '#a7f3d0', text: '#065f46', border: '#10b981' },
+  { bg: '#fde68a', text: '#78350f', border: '#f59e0b' },
+  { bg: '#ddd6fe', text: '#5b21b6', border: '#8b5cf6' },
+  { bg: '#fecdd3', text: '#9f1239', border: '#f43f5e' },
+  { bg: '#a5f3fc', text: '#0e7490', border: '#06b6d4' },
+  { bg: '#fbcfe8', text: '#9d174d', border: '#ec4899' },
+  { bg: '#fed7aa', text: '#9a3412', border: '#f97316' },
+  { bg: '#c7d2fe', text: '#3730a3', border: '#6366f1' },
+  { bg: '#99f6e4', text: '#134e4a', border: '#14b8a6' },
+  { bg: '#d9f99d', text: '#3f6212', border: '#84cc16' },
+  { bg: '#f5d0fe', text: '#701a75', border: '#d946ef' },
+  { bg: '#bae6fd', text: '#0c4a6e', border: '#0ea5e9' },
+  { bg: '#bbf7d0', text: '#14532d', border: '#22c55e' },
+  { bg: '#e9d5ff', text: '#581c87', border: '#a855f7' },
+  { bg: '#fef08a', text: '#713f12', border: '#eab308' },
+];
+
+function agentColorIndex(name: string): number {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return AGENT_COLORS[Math.abs(hash) % AGENT_COLORS.length];
+  return Math.abs(hash) % AGENT_COLORS.length;
+}
+
+function getAgentColor(name: string): string {
+  return AGENT_COLORS[agentColorIndex(name)];
 }
 
 interface Assignment {
@@ -207,18 +231,198 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
     }
   };
 
-  const gridContentRef = useRef<HTMLDivElement>(null);
-
-  const handleScreenshot = async () => {
-    if (!gridContentRef.current) return;
+  const handleScreenshot = () => {
     try {
-      const { toPng } = await import('html-to-image');
-      const dataUrl = await toPng(gridContentRef.current, { cacheBust: true });
-      const link = document.createElement('a');
-      link.download = `turnos-${format(startDate, 'yyyy-MM-dd')}.png`;
-      link.href = dataUrl;
-      link.click();
-      toast.success('Imagen descargada');
+      const HOUR_W = 52;
+      const DAY_W = 150;
+      const HOUR_H = 38;
+      const HEADER_H = 46;
+      const TITLE_H = 38;
+      const DAYS = 7;
+      const HOURS = 24;
+      const W = HOUR_W + DAYS * DAY_W;
+      const H = TITLE_H + HEADER_H + HOURS * HOUR_H;
+      const SCALE = 2;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = W * SCALE;
+      canvas.height = H * SCALE;
+      const ctx = canvas.getContext('2d')!;
+      ctx.scale(SCALE, SCALE);
+
+      const font = (size: number, bold = false) =>
+        `${bold ? 'bold ' : ''}${size}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+
+      // ── Fondo blanco total ──────────────────────────────────────────────
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, W, H);
+
+      // ── Barra de título ─────────────────────────────────────────────────
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(0, 0, W, TITLE_H);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = font(12, true);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('GESTIÓN DE TURNOS', 14, TITLE_H / 2);
+      ctx.fillStyle = '#7bd21e';
+      ctx.font = font(11);
+      ctx.textAlign = 'right';
+      const weekLabel = `${format(startDate, "dd 'de' MMMM", { locale: es })} – ${format(addDays(startDate, 6), "dd 'de' MMMM yyyy", { locale: es })}`;
+      ctx.fillText(weekLabel, W - 14, TITLE_H / 2);
+
+      // ── Header de días ──────────────────────────────────────────────────
+      const headerY = TITLE_H;
+      ctx.fillStyle = '#f3f4f6';
+      ctx.fillRect(0, headerY, W, HEADER_H);
+
+      weekDays.forEach((day, i) => {
+        const x = HOUR_W + i * DAY_W;
+        const today = isToday(day);
+        if (today) {
+          ctx.fillStyle = '#f0fdf4';
+          ctx.fillRect(x, headerY, DAY_W, HEADER_H);
+        }
+        ctx.fillStyle = today ? '#16a34a' : '#6b7280';
+        ctx.font = font(9);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(format(day, 'eee', { locale: es }).toUpperCase(), x + DAY_W / 2, headerY + 14);
+        ctx.fillStyle = today ? '#16a34a' : '#111827';
+        ctx.font = font(15, true);
+        ctx.fillText(format(day, 'dd'), x + DAY_W / 2, headerY + 32);
+        if (today) {
+          ctx.strokeStyle = '#86efac';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(x + 1, headerY + HEADER_H - 1);
+          ctx.lineTo(x + DAY_W - 1, headerY + HEADER_H - 1);
+          ctx.stroke();
+        }
+      });
+
+      // ── Línea inferior del header ────────────────────────────────────────
+      ctx.strokeStyle = '#d1d5db';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, headerY + HEADER_H);
+      ctx.lineTo(W, headerY + HEADER_H);
+      ctx.stroke();
+
+      // ── Filas de horas ───────────────────────────────────────────────────
+      const bodyY = TITLE_H + HEADER_H;
+      const periodBg = ['#eef2ff', '#f9fafb', '#fefce8', '#fff7ed']; // noche/mañana/tarde/noche2
+
+      hours.forEach(hour => {
+        const y = bodyY + hour * HOUR_H;
+        const period = Math.floor(hour / 6);
+        ctx.fillStyle = periodBg[period];
+        ctx.fillRect(0, y, W, HOUR_H);
+
+        // Línea de fila
+        const isMajor = hour % 6 === 0 && hour > 0;
+        ctx.strokeStyle = isMajor ? '#9ca3af' : '#e5e7eb';
+        ctx.lineWidth = isMajor ? 1.5 : 0.5;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+
+        // Etiqueta de hora
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = font(10);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${String(hour).padStart(2, '0')}:00`, HOUR_W / 2, y + HOUR_H / 2);
+      });
+
+      // Línea final
+      ctx.strokeStyle = '#e5e7eb';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(0, bodyY + HOURS * HOUR_H);
+      ctx.lineTo(W, bodyY + HOURS * HOUR_H);
+      ctx.stroke();
+
+      // ── Separadores de columnas ──────────────────────────────────────────
+      weekDays.forEach((day, i) => {
+        const x = HOUR_W + i * DAY_W;
+        const today = isToday(day);
+        if (today) {
+          ctx.fillStyle = 'rgba(134,239,172,0.07)';
+          ctx.fillRect(x, bodyY, DAY_W, HOURS * HOUR_H);
+        }
+        ctx.strokeStyle = today ? '#86efac' : '#d1d5db';
+        ctx.lineWidth = today ? 1.5 : 1;
+        ctx.beginPath();
+        ctx.moveTo(x, headerY);
+        ctx.lineTo(x, bodyY + HOURS * HOUR_H);
+        ctx.stroke();
+      });
+
+      // Columna de horas — separador derecho
+      ctx.strokeStyle = '#d1d5db';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(HOUR_W, headerY);
+      ctx.lineTo(HOUR_W, bodyY + HOURS * HOUR_H);
+      ctx.stroke();
+
+      // ── Bloques de agentes ───────────────────────────────────────────────
+      weekDays.forEach((day, i) => {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        const blocks = dayLayoutBlocks[dateStr] || [];
+        const colX = HOUR_W + i * DAY_W;
+
+        blocks.forEach(block => {
+          const color = CANVAS_COLORS[agentColorIndex(block.agentName)];
+          const bx = colX + (block.lane / block.totalLanes) * DAY_W + 3;
+          const bw = (DAY_W / block.totalLanes) - 6;
+          const by = bodyY + block.startHour * HOUR_H + 2;
+          const bh = block.durationHours * HOUR_H - 4;
+
+          ctx.fillStyle = color.bg;
+          ctx.strokeStyle = color.border;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          (ctx as CanvasRenderingContext2D & { roundRect: (x: number, y: number, w: number, h: number, r: number) => void })
+            .roundRect(bx, by, bw, bh, 4);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.save();
+          ctx.rect(bx + 2, by, bw - 4, bh);
+          ctx.clip();
+          ctx.fillStyle = color.text;
+          ctx.font = font(11, true);
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText(block.agentName.split(' ')[0], bx + 5, by + 5);
+          if (bh >= 30) {
+            ctx.font = font(9);
+            ctx.fillText(
+              `${String(block.startHour).padStart(2, '0')}:00 – ${String(block.endHour).padStart(2, '0')}:00`,
+              bx + 5, by + 19,
+            );
+          }
+          ctx.restore();
+        });
+      });
+
+      // ── Borde exterior ───────────────────────────────────────────────────
+      ctx.strokeStyle = '#9ca3af';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+
+      canvas.toBlob(blob => {
+        if (!blob) { toast.error('Error al generar la imagen'); return; }
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `turnos-${format(startDate, 'yyyy-MM-dd')}.png`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        toast.success('Imagen descargada');
+      }, 'image/png');
     } catch {
       toast.error('Error al generar la imagen');
     }
@@ -486,7 +690,6 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
       <div className="flex-1 border border-border rounded-lg overflow-hidden bg-background min-h-0">
         <ScrollArea className="h-full">
           <div
-            ref={gridContentRef}
             className="min-w-[700px]"
             onMouseLeave={() => { if (isSelecting) handleMouseUp(); }}
           >
