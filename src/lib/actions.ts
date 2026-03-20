@@ -488,15 +488,17 @@ export async function createGoogleCalendarEvent({
     date,
     fromHour,
     toHour,
+    calendarId: calendarIdOverride,
 }: {
     title: string;
     date: string;       // yyyy-MM-dd
     fromHour: number;   // 0-23
     toHour: number;     // 1-24 (exclusive end)
+    calendarId?: string;
 }) {
     await requireAuth();
     const settings = await getCalendarSettings();
-    const calendarId = settings?.targetCalendarId || 'primary';
+    const calendarId = calendarIdOverride ?? settings?.targetCalendarId ?? 'primary';
     const auth = await getGoogleAuthClient();
     if (!auth) throw new Error('No hay cuenta de Google vinculada');
 
@@ -507,6 +509,8 @@ export async function createGoogleCalendarEvent({
         ? new Date(new Date(date + 'T00:00:00').getTime() + 86400000).toISOString().slice(0, 10)
         : date;
 
+    console.log(`[createGCal] calendarId=${calendarId} date=${date} from=${fromHour} to=${toHour} title="${title}"`);
+
     const res = await calendar.events.insert({
         calendarId,
         requestBody: {
@@ -515,7 +519,9 @@ export async function createGoogleCalendarEvent({
             end:   { dateTime: `${endDate}T${String(endHour).padStart(2, '0')}:00:00`, timeZone: 'America/Bogota' },
         },
     });
-    return res.data;
+
+    console.log(`[createGCal] OK id=${res.data.id} link=${res.data.htmlLink}`);
+    return { id: res.data.id, htmlLink: res.data.htmlLink, calendarId };
 }
 
 async function deleteFromGoogleCalendar(eventId: string) {
@@ -659,6 +665,18 @@ export async function getIntercomMetrics(limit: number = 30, filters?: { agentId
 
 // --- EVENTS ---
 
+const EVENTS_CALENDAR_ID = 'mediastream.cl_lkq6aii5aai7eb6edpdj213158@group.calendar.google.com';
+
+function buildGcalEventBody(title: string, description: string | undefined, startDate: Date, endDate: Date) {
+    const tz = 'America/Bogota';
+    return {
+        summary: title,
+        description: description || '',
+        start: { dateTime: startDate.toISOString(), timeZone: tz },
+        end:   { dateTime: endDate.toISOString(),   timeZone: tz },
+    };
+}
+
 export async function createEvent(data: {
     title: string;
     description?: string;
@@ -666,24 +684,110 @@ export async function createEvent(data: {
     endDate: Date;
     type: string;
     notifySlack: boolean;
+    syncToGcal?: boolean;
 }) {
     const session = await getServerSession(authOptions);
+    let googleEventId: string | undefined;
+
+    if (data.syncToGcal) {
+        try {
+            const auth = await getGoogleAuthClient();
+            if (auth) {
+                const cal = google.calendar({ version: 'v3', auth });
+                const res = await cal.events.insert({
+                    calendarId: EVENTS_CALENDAR_ID,
+                    requestBody: buildGcalEventBody(data.title, data.description, data.startDate, data.endDate),
+                });
+                googleEventId = res.data.id ?? undefined;
+            }
+        } catch (e) {
+            console.error('[createEvent] GCal error:', e);
+        }
+    }
+
     const event = await prisma.event.create({
         data: {
-            ...data,
-            createdBy: session?.user?.name || "Sistema"
+            title: data.title,
+            description: data.description,
+            startDate: data.startDate,
+            endDate: data.endDate,
+            type: data.type,
+            notifySlack: data.notifySlack,
+            createdBy: session?.user?.name || "Sistema",
+            ...(googleEventId ? { googleEventId } : {}),
         }
     });
 
     if (data.notifySlack) {
-        // Enviar notificación a Slack si se solicitó (no bloqueante)
-        const { sendSlackNotification } = await import('./slack');
-        after(async () => {
-            await sendSlackNotification(data);
+        // Find agents on shift at the event's start time
+        const dateStr = data.startDate.toISOString().split('T')[0];
+        const startHour = data.startDate.getHours();
+        const assignments = await prisma.supportAssignment.findMany({
+            where: { date: dateStr, hour: startHour },
         });
+        const agentNames = assignments.map((a: any) => a.agentName);
+
+        const { sendSlackNotification } = await import('./slack');
+        after(async () => { await sendSlackNotification(data, agentNames); });
     }
 
     revalidatePath('/');
+    return event;
+}
+
+export async function updateEvent(id: string, data: {
+    title: string;
+    description?: string;
+    startDate: Date;
+    endDate: Date;
+    type: string;
+    notifySlack: boolean;
+    syncToGcal?: boolean;
+}) {
+    await requireAuth();
+
+    // Sync to Google Calendar if requested
+    if (data.syncToGcal) {
+        try {
+            const auth = await getGoogleAuthClient();
+            if (auth) {
+                const cal = google.calendar({ version: 'v3', auth });
+                const existing = await prisma.event.findUnique({ where: { id }, select: { googleEventId: true } });
+                const body = buildGcalEventBody(data.title, data.description, data.startDate, data.endDate);
+
+                if (existing?.googleEventId) {
+                    // Update existing GCal event
+                    await cal.events.patch({
+                        calendarId: EVENTS_CALENDAR_ID,
+                        eventId: existing.googleEventId,
+                        requestBody: body,
+                    });
+                } else {
+                    // No GCal event yet — create one and store its ID
+                    const res = await cal.events.insert({
+                        calendarId: EVENTS_CALENDAR_ID,
+                        requestBody: body,
+                    });
+                    await prisma.event.update({ where: { id }, data: { googleEventId: res.data.id ?? undefined } });
+                }
+            }
+        } catch (e) {
+            console.error('[updateEvent] GCal error:', e);
+        }
+    }
+
+    const event = await prisma.event.update({
+        where: { id },
+        data: {
+            title: data.title,
+            description: data.description,
+            startDate: data.startDate,
+            endDate: data.endDate,
+            type: data.type,
+            notifySlack: data.notifySlack,
+        },
+    });
+    revalidatePath('/events');
     return event;
 }
 
@@ -742,8 +846,9 @@ export async function sendEventNotification(eventId: string) {
 
     const { sendStylePreview } = await import('./slack');
     
+    const { sendSlackNotification } = await import('./slack');
     after(async () => {
-        await sendStylePreview({
+        await sendSlackNotification({
             title: event.title,
             description: event.description || undefined,
             startDate: event.startDate,
@@ -753,5 +858,12 @@ export async function sendEventNotification(eventId: string) {
     });
 
     return { success: true };
+}
+
+export async function previewSlackStyles() {
+    await requireAuth();
+    const { sendStylePreview } = await import('./slack');
+    after(async () => { await sendStylePreview(); });
+    return { ok: true };
 }
 

@@ -232,15 +232,16 @@ model ActivityLog {
 }
 
 model Event {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  title       String
-  description String?
-  startDate   DateTime
-  endDate     DateTime
-  type        String   // 'Maintenance', 'Promotion', 'Launch', 'Meeting'
-  notifySlack Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  createdBy   String?
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  title         String
+  description   String?
+  startDate     DateTime
+  endDate       DateTime
+  type          String   // 'Maintenance', 'Promotion', 'Launch', 'Meeting'
+  notifySlack   Boolean  @default(false)
+  googleEventId String?  // ID del evento en Google Calendar
+  createdAt     DateTime @default(now())
+  createdBy     String?
 }
 
 model ClientNote {

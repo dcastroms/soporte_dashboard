@@ -15,7 +15,7 @@ import {
   Sheet, SheetContent, SheetTrigger,
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
-import { X, ChevronLeft, ChevronRight, SlidersHorizontal, Trash2, CalendarRange, ClipboardList, Calendar, Camera, CalendarPlus, LayoutGrid } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, SlidersHorizontal, Trash2, CalendarRange, ClipboardList, Calendar, Camera, CalendarPlus, LayoutGrid, Send } from "lucide-react";
 import { format, addDays, startOfWeek, eachDayOfInterval, isSameDay, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { GoogleCalendarSettings } from './GoogleCalendarSettings';
@@ -177,6 +177,7 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
   const [selectionStart, setSelectionStart] = useState<{ date: Date; hour: number } | null>(null);
   const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
+  const [isSendingToSlack, setIsSendingToSlack] = useState(false);
 
   const startDate = startOfWeek(currentDate, { weekStartsOn: 1 });
   const weekDays = eachDayOfInterval({ start: startDate, end: addDays(startDate, 6) });
@@ -240,7 +241,7 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
     }
   };
 
-  const handleScreenshot = () => {
+  const buildCanvas = (): { canvas: HTMLCanvasElement; weekLabel: string } | null => {
     try {
       const HOUR_W = 52;
       const DAY_W = 150;
@@ -423,17 +424,45 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
       ctx.lineWidth = 1;
       ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
 
-      canvas.toBlob(blob => {
-        if (!blob) { toast.error('Error al generar la imagen'); return; }
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `turnos-${format(startDate, 'yyyy-MM-dd')}.png`;
-        link.click();
-        URL.revokeObjectURL(link.href);
-        toast.success('Imagen descargada');
-      }, 'image/png');
+      return { canvas, weekLabel };
     } catch {
-      toast.error('Error al generar la imagen');
+      return null;
+    }
+  };
+
+  const handleScreenshot = () => {
+    const result = buildCanvas();
+    if (!result) { toast.error('Error al generar la imagen'); return; }
+    const { canvas, weekLabel: _wl } = result;
+    canvas.toBlob(blob => {
+      if (!blob) { toast.error('Error al generar la imagen'); return; }
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `turnos-${format(startDate, 'yyyy-MM-dd')}.png`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      toast.success('Imagen descargada');
+    }, 'image/png');
+  };
+
+  const handleSendToSlack = async () => {
+    const result = buildCanvas();
+    if (!result) { toast.error('Error al generar la imagen'); return; }
+    const { canvas, weekLabel } = result;
+    const imageBase64 = canvas.toDataURL('image/png');
+    setIsSendingToSlack(true);
+    try {
+      const res = await fetch('/api/screenshots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64, weekLabel }),
+      });
+      if (!res.ok) throw new Error('Error al enviar');
+      toast.success('Screenshot enviado a Slack 📸');
+    } catch {
+      toast.error('Error al enviar el screenshot a Slack');
+    } finally {
+      setIsSendingToSlack(false);
     }
   };
 
@@ -610,6 +639,15 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
             title="Descargar imagen de la semana"
           >
             <Camera size={14} />
+          </Button>
+          <Button
+            variant="ghost" size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={handleSendToSlack}
+            disabled={isSendingToSlack}
+            title="Enviar screenshot a Slack"
+          >
+            <Send size={14} className={isSendingToSlack ? 'animate-pulse' : ''} />
           </Button>
 
         {/* Ícono de opciones — separado visualmente del grid */}
