@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,10 +11,13 @@ import {
 } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
+} from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
-import { X, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, SlidersHorizontal, Trash2 } from "lucide-react";
 import { format, addDays, startOfWeek, eachDayOfInterval, isSameDay, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { GoogleCalendarSettings } from './GoogleCalendarSettings';
@@ -75,6 +78,7 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
   const [customAgent, setCustomAgent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
 
   const [users, setUsers] = useState<Array<{ id: string; name: string | null; email: string }>>([]);
 
@@ -123,10 +127,6 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
     return assignments.filter(a => a.date === dateStr && a.hour === hour);
   };
 
-  const goToPrevWeek = () => setCurrentDate(d => addDays(d, -7));
-  const goToNextWeek = () => setCurrentDate(d => addDays(d, 7));
-  const goToToday = () => setCurrentDate(new Date());
-
   const handleClearWeek = async () => {
     try {
       const start = format(startDate, 'yyyy-MM-dd');
@@ -134,6 +134,7 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
       await deleteAssignmentsForWeek(start, end);
       setAssignments(prev => prev.filter(a => a.date < start || a.date > end));
       toast.success("Semana limpiada");
+      setClearOpen(false);
     } catch {
       toast.error("Error al limpiar la semana");
     }
@@ -169,9 +170,9 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
   const isCellSelected = (date: Date, hour: number) => {
     if (!isSelecting || !selectionStart || selectionEnd === null) return false;
     if (!isSameDay(date, selectionStart.date)) return false;
-    const start = Math.min(selectionStart.hour, selectionEnd);
-    const end = Math.max(selectionStart.hour, selectionEnd);
-    return hour >= start && hour <= end;
+    const s = Math.min(selectionStart.hour, selectionEnd);
+    const e = Math.max(selectionStart.hour, selectionEnd);
+    return hour >= s && hour <= e;
   };
 
   const toggleAgent = (name: string) => {
@@ -229,106 +230,43 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
   };
 
   return (
-    <div className="flex flex-col gap-3 h-full">
+    <div className="flex flex-col h-full">
       <HandoverAlert assignments={assignments} />
 
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToPrevWeek}>
-            <ChevronLeft size={14} />
-          </Button>
-          <span className="text-sm font-bold min-w-[160px] text-center select-none">
-            {format(startDate, 'dd MMM', { locale: es })} – {format(addDays(startDate, 6), 'dd MMM yyyy', { locale: es })}
-          </span>
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToNextWeek}>
-            <ChevronRight size={14} />
-          </Button>
-        </div>
-
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={goToToday}>
-          Hoy
-        </Button>
-
-        <div className="h-5 w-px bg-border mx-1" />
-
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 text-xs text-destructive hover:text-destructive gap-1.5">
-              <Trash2 size={12} />
-              Limpiar semana
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>¿Limpiar todos los turnos?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Se eliminarán todas las asignaciones de la semana del{" "}
-                <strong>{format(startDate, "dd 'de' MMMM", { locale: es })}</strong> al{" "}
-                <strong>{format(addDays(startDate, 6), "dd 'de' MMMM", { locale: es })}</strong>.
-                Esta acción no se puede deshacer.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleClearWeek} className="bg-destructive hover:bg-destructive/90">
-                Sí, limpiar
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        <div className="h-5 w-px bg-border mx-1" />
-
-        {session?.user && (
-          <GoogleCalendarSettings assignmentsInView={weekAssignments} />
-        )}
-
-        <HandoverDialog assignments={weekAssignments} />
-      </div>
-
-      {/* Agent bar */}
-      {Object.keys(weeklySummary).length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap px-3 py-2 bg-muted/40 border border-border rounded-lg">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mr-1">Semana</span>
-          {Object.entries(weeklySummary)
-            .sort((a, b) => b[1] - a[1])
-            .map(([name, hrs]) => {
-              const colorClass = AGENT_COLOR_CLASSES[getAgentColor(name)];
-              const isOver = hrs > OVERLOAD_HOURS;
-              return (
-                <Badge
-                  key={name}
-                  variant="outline"
-                  className={cn(
-                    "text-[10px] font-semibold gap-1 py-0.5",
-                    isOver
-                      ? "bg-red-500/15 text-red-500 border-red-500/40"
-                      : colorClass
-                  )}
-                >
-                  {name}
-                  <span className="font-bold">{hrs}h</span>
-                  {isOver && <span>⚠</span>}
-                </Badge>
-              );
-            })}
-        </div>
-      )}
-
-      {/* Grid */}
-      <Card className="border-border overflow-hidden flex-1 flex flex-col bg-background">
+      {/* Grid — ocupa todo el espacio disponible */}
+      <div className="flex-1 border border-border rounded-lg overflow-hidden bg-background flex flex-col">
         <CardContent className="p-0 flex-1 flex flex-col">
-          <ScrollArea className="h-[calc(100vh-220px)]">
+          <ScrollArea className="flex-1 h-[calc(100vh-130px)]">
             <div
-              className="min-w-[700px]"
+              className="min-w-[720px]"
               onMouseLeave={() => { if (isSelecting) handleMouseUp(); }}
             >
-              {/* Day headers */}
-              <div className="grid grid-cols-[48px_repeat(7,1fr)] border-b border-border sticky top-0 bg-background z-20">
-                <div className="p-2 border-r border-border bg-muted/40 flex items-center justify-center">
-                  <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">H</span>
+              {/* Header sticky — nav integrada aquí */}
+              <div className="grid grid-cols-[56px_repeat(7,1fr)_40px] border-b border-border sticky top-0 bg-background z-20">
+
+                {/* Celda esquina: navegación compacta */}
+                <div className="border-r border-border bg-muted/40 flex flex-col items-center justify-center gap-0.5 p-1">
+                  <button
+                    onClick={() => setCurrentDate(d => addDays(d, -7))}
+                    className="w-5 h-5 rounded flex items-center justify-center hover:bg-muted transition-colors"
+                  >
+                    <ChevronLeft size={12} className="text-muted-foreground" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentDate(new Date())}
+                    className="text-[7px] font-bold text-primary hover:opacity-70 transition-opacity leading-none"
+                  >
+                    HOY
+                  </button>
+                  <button
+                    onClick={() => setCurrentDate(d => addDays(d, 7))}
+                    className="w-5 h-5 rounded flex items-center justify-center hover:bg-muted transition-colors"
+                  >
+                    <ChevronRight size={12} className="text-muted-foreground" />
+                  </button>
                 </div>
+
+                {/* Días */}
                 {weekDays.map((day: Date) => {
                   const todayCol = isToday(day);
                   return (
@@ -345,12 +283,92 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
                     </div>
                   );
                 })}
+
+                {/* Ícono de menú (último col) */}
+                <div className="flex items-center justify-center border-l border-border bg-muted/20">
+                  <Sheet>
+                    <SheetTrigger asChild>
+                      <button className="w-7 h-7 rounded flex items-center justify-center hover:bg-muted transition-colors">
+                        <SlidersHorizontal size={13} className="text-muted-foreground" />
+                      </button>
+                    </SheetTrigger>
+                    <SheetContent side="right" className="w-[300px] flex flex-col gap-5">
+                      <SheetHeader>
+                        <SheetTitle className="text-sm">Opciones de turno</SheetTitle>
+                      </SheetHeader>
+
+                      {/* Semana actual */}
+                      <div>
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Semana visible</p>
+                        <p className="text-sm font-semibold">
+                          {format(startDate, "dd 'de' MMM", { locale: es })} – {format(addDays(startDate, 6), "dd 'de' MMM yyyy", { locale: es })}
+                        </p>
+                      </div>
+
+                      {/* Carga semanal */}
+                      {Object.keys(weeklySummary).length > 0 && (
+                        <div>
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Carga semanal</p>
+                          <div className="flex flex-col gap-1.5">
+                            {Object.entries(weeklySummary)
+                              .sort((a, b) => b[1] - a[1])
+                              .map(([name, hrs]) => {
+                                const colorClass = AGENT_COLOR_CLASSES[getAgentColor(name)];
+                                const isOver = hrs > OVERLOAD_HOURS;
+                                return (
+                                  <div key={name} className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <div className={cn("w-2 h-2 rounded-full border flex-shrink-0", colorClass)} />
+                                      <span className="text-xs font-medium truncate">{name}</span>
+                                    </div>
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "text-[10px] font-bold shrink-0",
+                                        isOver ? "bg-red-500/15 text-red-500 border-red-500/40" : colorClass
+                                      )}
+                                    >
+                                      {hrs}h {isOver && "⚠"}
+                                    </Badge>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Separador */}
+                      <div className="h-px bg-border" />
+
+                      {/* Acciones */}
+                      <div className="flex flex-col gap-2">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Acciones</p>
+
+                        <HandoverDialog assignments={weekAssignments} />
+
+                        {session?.user && (
+                          <GoogleCalendarSettings assignmentsInView={weekAssignments} />
+                        )}
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full justify-start gap-2 text-destructive hover:text-destructive border-destructive/30"
+                          onClick={() => setClearOpen(true)}
+                        >
+                          <Trash2 size={13} />
+                          Limpiar semana
+                        </Button>
+                      </div>
+                    </SheetContent>
+                  </Sheet>
+                </div>
               </div>
 
-              {/* Hour rows */}
+              {/* Filas de horas */}
               <div className="divide-y divide-border">
                 {hours.map(hour => (
-                  <div key={hour} className="grid grid-cols-[48px_repeat(7,1fr)] h-[40px]">
+                  <div key={hour} className="grid grid-cols-[56px_repeat(7,1fr)_40px] h-[40px]">
                     <div className="border-r border-border flex items-center justify-center bg-muted/10">
                       <span className="text-[9px] font-mono text-muted-foreground">{String(hour).padStart(2, '0')}h</span>
                     </div>
@@ -400,15 +418,38 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
                         </div>
                       );
                     })}
+                    {/* Celda vacía columna menú */}
+                    <div className="border-l border-border bg-muted/10" />
                   </div>
                 ))}
               </div>
             </div>
           </ScrollArea>
         </CardContent>
-      </Card>
+      </div>
 
-      {/* Assignment Dialog */}
+      {/* AlertDialog limpiar semana (controlado desde el Sheet) */}
+      <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Limpiar todos los turnos?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminarán todas las asignaciones de la semana del{" "}
+              <strong>{format(startDate, "dd 'de' MMMM", { locale: es })}</strong> al{" "}
+              <strong>{format(addDays(startDate, 6), "dd 'de' MMMM", { locale: es })}</strong>.
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearWeek} className="bg-destructive hover:bg-destructive/90">
+              Sí, limpiar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo de asignación */}
       <Dialog
         open={isDialogOpen}
         onOpenChange={open => {
@@ -424,7 +465,7 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
                 <>
                   {format(selectedCell.date, "EEEE dd 'de' MMMM", { locale: es })}
                   {selectedCell.hours.length > 1
-                    ? ` · ${String(selectedCell.hours[0]).padStart(2, '0')}:00 – ${String(selectedCell.hours[selectedCell.hours.length - 1] + 1).padStart(2, '00')}:00`
+                    ? ` · ${String(selectedCell.hours[0]).padStart(2, '0')}:00 – ${String(selectedCell.hours[selectedCell.hours.length - 1] + 1).padStart(2, '0')}:00`
                     : ` · ${String(selectedCell.hours[0]).padStart(2, '0')}:00`}
                 </>
               )}
