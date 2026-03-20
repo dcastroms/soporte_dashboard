@@ -63,6 +63,61 @@ interface Assignment {
   agentName: string;
 }
 
+interface LayoutBlock {
+  agentName: string;
+  startHour: number;
+  endHour: number;
+  durationHours: number;
+  assignmentIds: string[];
+  lane: number;
+  totalLanes: number;
+}
+
+function buildBlocks(dayAssignments: Assignment[]): Omit<LayoutBlock, 'lane' | 'totalLanes'>[] {
+  const byAgent: Record<string, { hours: number[]; ids: Record<number, string> }> = {};
+  dayAssignments.forEach(a => {
+    if (!byAgent[a.agentName]) byAgent[a.agentName] = { hours: [], ids: {} };
+    byAgent[a.agentName].hours.push(a.hour);
+    byAgent[a.agentName].ids[a.hour] = a.id;
+  });
+
+  const blocks: Omit<LayoutBlock, 'lane' | 'totalLanes'>[] = [];
+  Object.entries(byAgent).forEach(([agentName, { hours, ids }]) => {
+    const sorted = [...new Set(hours)].sort((a, b) => a - b);
+    let i = 0;
+    while (i < sorted.length) {
+      let j = i;
+      while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
+      const startHour = sorted[i];
+      const endHour = sorted[j] + 1;
+      blocks.push({
+        agentName, startHour, endHour,
+        durationHours: endHour - startHour,
+        assignmentIds: sorted.slice(i, j + 1).map(h => ids[h]),
+      });
+      i = j + 1;
+    }
+  });
+  return blocks;
+}
+
+function computeLayout(dayAssignments: Assignment[]): LayoutBlock[] {
+  const raw = buildBlocks(dayAssignments);
+  if (raw.length === 0) return [];
+  const sorted = [...raw].sort((a, b) => a.startHour - b.startHour);
+  const lanes: number[] = [];
+  const laned = sorted.map(block => {
+    let lane = lanes.findIndex(e => e <= block.startHour);
+    if (lane === -1) { lane = lanes.length; lanes.push(0); }
+    lanes[lane] = block.endHour;
+    return { ...block, lane, totalLanes: 0 };
+  });
+  return laned.map(block => {
+    const concurrent = laned.filter(b => b.startHour < block.endHour && b.endHour > block.startHour);
+    return { ...block, totalLanes: Math.max(...concurrent.map(b => b.lane)) + 1 };
+  });
+}
+
 interface ShiftCalendarProps {
   initialAssignments: Assignment[];
 }
@@ -136,9 +191,25 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
     return { extraHours, nocturnalWeekday, nocturnalSunday };
   }, [weekAssignments, weeklySummary]);
 
-  const getAssignmentsForCell = (date: Date, hour: number) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    return assignments.filter(a => a.date === dateStr && a.hour === hour);
+  const dayLayoutBlocks = useMemo(() => {
+    const result: Record<string, LayoutBlock[]> = {};
+    weekDays.forEach(day => {
+      const dateStr = format(day, 'yyyy-MM-dd');
+      result[dateStr] = computeLayout(assignments.filter(a => a.date === dateStr));
+    });
+    return result;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignments, startDate]);
+
+  const handleDeleteBlock = async (ids: string[], e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await Promise.all(ids.map(id => deleteSupportAssignment(id)));
+      setAssignments(prev => prev.filter(a => !ids.includes(a.id)));
+      toast.success(`${ids.length} hora(s) eliminada(s)`);
+    } catch {
+      toast.error("Error al eliminar");
+    }
   };
 
   const handleClearWeek = async () => {
@@ -232,17 +303,6 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
     }
   };
 
-  const handleDeleteAssignment = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await deleteSupportAssignment(id);
-      setAssignments(prev => prev.filter(a => a.id !== id));
-      toast.success("Asignación eliminada");
-    } catch {
-      toast.error("Error al eliminar");
-    }
-  };
-
   return (
     <div className="flex flex-col h-full gap-2">
       <HandoverAlert assignments={assignments} />
@@ -302,7 +362,8 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
                       .sort((a, b) => b[1] - a[1])
                       .map(([name, hrs]) => {
                         const colorClass = AGENT_COLOR_CLASSES[getAgentColor(name)];
-                        const isOver = hrs > OVERLOAD_HOURS;
+                        const extra = hrs - OVERLOAD_HOURS;
+                        const isOver = extra > 0;
                         return (
                           <div
                             key={name}
@@ -312,19 +373,46 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
                               <div className={cn("w-2 h-2 rounded-full border flex-shrink-0", colorClass)} />
                               <span className="text-[12px] font-medium truncate">{name}</span>
                             </div>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] font-bold shrink-0 h-5",
-                                isOver ? "bg-red-500/15 text-red-500 border-red-500/40" : colorClass
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] font-bold h-5",
+                                  isOver ? "bg-red-500/15 text-red-500 border-red-500/40" : colorClass
+                                )}
+                              >
+                                {hrs}h
+                              </Badge>
+                              {isOver && (
+                                <Badge variant="outline" className="text-[10px] font-bold h-5 bg-orange-500/10 text-orange-500 border-orange-500/30">
+                                  +{extra} extra
+                                </Badge>
                               )}
-                            >
-                              {hrs}h{isOver && " ⚠"}
-                            </Badge>
+                            </div>
                           </div>
                         );
                       })}
                   </div>
+
+                  {/* Contadores de la semana */}
+                  {weekAssignments.length > 0 && (
+                    <div className="mt-2 mx-2 p-2.5 rounded-lg bg-muted/40 border border-border space-y-1.5">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground">Horas extra</span>
+                        <span className={cn("font-bold tabular-nums", weeklyStats.extraHours > 0 ? "text-orange-500" : "text-foreground/60")}>
+                          {weeklyStats.extraHours}h
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground">Noct. Lun–Sáb</span>
+                        <span className="font-bold tabular-nums text-foreground/60">{weeklyStats.nocturnalWeekday}h</span>
+                      </div>
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-muted-foreground">Noct. Domingo</span>
+                        <span className="font-bold tabular-nums text-foreground/60">{weeklyStats.nocturnalSunday}h</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -384,56 +472,6 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
         </Sheet>
       </div>
 
-      {/* Barra de agentes — horas semanales */}
-      {Object.keys(weeklySummary).length > 0 && (
-        <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
-          {Object.entries(weeklySummary)
-            .sort((a, b) => b[1] - a[1])
-            .map(([name, hrs]) => {
-              const extra = hrs - OVERLOAD_HOURS;
-              const isOver = extra > 0;
-              const colorClass = AGENT_COLOR_CLASSES[getAgentColor(name)];
-              return (
-                <div
-                  key={name}
-                  className={cn(
-                    "flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border select-none",
-                    isOver
-                      ? "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30"
-                      : colorClass
-                  )}
-                >
-                  <span>{name.split(' ')[0]}</span>
-                  <span className="opacity-75">{hrs}h</span>
-                  {isOver && (
-                    <span className="text-[10px] font-bold opacity-90">+{extra} extra</span>
-                  )}
-                </div>
-              );
-            })}
-        </div>
-      )}
-
-      {/* Contadores semanales */}
-      {weekAssignments.length > 0 && (
-        <div className="flex items-center gap-3 flex-shrink-0 text-[11px] text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <span className="font-bold text-foreground/70">{weeklyStats.extraHours}</span>
-            <span>h extra</span>
-          </div>
-          <span className="text-border">·</span>
-          <div className="flex items-center gap-1">
-            <span className="font-bold text-foreground/70">{weeklyStats.nocturnalWeekday}</span>
-            <span>noct. Lun–Sáb</span>
-          </div>
-          <span className="text-border">·</span>
-          <div className="flex items-center gap-1">
-            <span className="font-bold text-foreground/70">{weeklyStats.nocturnalSunday}</span>
-            <span>noct. Dom</span>
-          </div>
-        </div>
-      )}
-
       {/* Grid — ocupa toda la altura restante */}
       <div className="flex-1 border border-border rounded-lg overflow-hidden bg-background min-h-0">
         <ScrollArea className="h-full">
@@ -442,15 +480,15 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
             onMouseLeave={() => { if (isSelecting) handleMouseUp(); }}
           >
             {/* Header días */}
-            <div className="grid grid-cols-[48px_repeat(7,1fr)] border-b border-border sticky top-0 bg-background z-20">
-              <div className="p-2 border-r border-border bg-muted/40 flex items-center justify-center">
+            <div className="flex border-b border-border sticky top-0 bg-background z-20">
+              <div className="w-12 flex-shrink-0 border-r border-border bg-muted/40 flex items-center justify-center py-2">
                 <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">H</span>
               </div>
               {weekDays.map((day: Date) => {
                 const todayCol = isToday(day);
                 return (
                   <div key={day.toString()} className={cn(
-                    "p-2 text-center border-r border-border last:border-r-0",
+                    "flex-1 py-2 text-center border-r border-border last:border-r-0",
                     todayCol && "bg-primary/5 border-b-2 border-b-primary"
                   )}>
                     <div className="text-[9px] uppercase font-semibold text-muted-foreground">
@@ -464,61 +502,93 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
               })}
             </div>
 
-            {/* Filas de horas */}
-            <div className="divide-y divide-border">
-              {hours.map(hour => (
-                <div key={hour} className="grid grid-cols-[48px_repeat(7,1fr)] h-[40px]">
-                  <div className="border-r border-border flex items-center justify-center bg-muted/10">
+            {/* Cuerpo: hora labels + columnas de días */}
+            <div className="flex">
+              {/* Columna de horas */}
+              <div className="w-12 flex-shrink-0 border-r border-border">
+                {hours.map(hour => (
+                  <div key={hour} className="h-[40px] border-b border-border last:border-b-0 bg-muted/10 flex items-center justify-center">
                     <span className="text-[9px] font-mono text-muted-foreground">{String(hour).padStart(2, '0')}h</span>
                   </div>
-                  {weekDays.map((day: Date) => {
-                    const cellAssignments = getAssignmentsForCell(day, hour);
-                    const isSelected = isCellSelected(day, hour);
-                    const todayCol = isToday(day);
-                    return (
-                      <div
-                        key={day.toString() + hour}
-                        className={cn(
-                          "border-r border-border last:border-r-0 relative select-none overflow-hidden cursor-crosshair",
-                          todayCol && "bg-primary/[0.02]",
-                          isSelected && "bg-primary/20 ring-inset ring-1 ring-primary/40",
-                          !isSelected && "hover:bg-primary/5"
-                        )}
-                        onMouseDown={() => handleMouseDown(day, hour)}
-                        onMouseEnter={() => handleMouseEnter(hour)}
-                        onMouseUp={handleMouseUp}
-                      >
-                        {cellAssignments.length > 0 && (
-                          <div className="flex gap-px p-px h-full items-center flex-wrap">
-                            {cellAssignments.map(assignment => {
-                              const colorClass = AGENT_COLOR_CLASSES[getAgentColor(assignment.agentName)] || AGENT_COLOR_CLASSES[COLOR_PALETTE[0]];
-                              const firstName = assignment.agentName.split(' ')[0];
-                              return (
-                                <div
-                                  key={assignment.id}
-                                  className={cn(
-                                    "flex items-center gap-0.5 px-1 rounded text-[9px] font-semibold border h-5 max-w-full",
-                                    colorClass
-                                  )}
-                                  onMouseDown={e => e.stopPropagation()}
-                                >
-                                  <span className="truncate">{firstName}</span>
-                                  <button
-                                    className="opacity-50 hover:opacity-100 transition-opacity flex-shrink-0"
-                                    onClick={e => handleDeleteAssignment(assignment.id, e)}
-                                  >
-                                    <X size={8} />
-                                  </button>
-                                </div>
-                              );
-                            })}
+                ))}
+              </div>
+
+              {/* Columnas de días — posicionamiento absoluto para bloques */}
+              {weekDays.map((day: Date) => {
+                const dateStr = format(day, 'yyyy-MM-dd');
+                const todayCol = isToday(day);
+                const blocks = dayLayoutBlocks[dateStr] || [];
+                return (
+                  <div
+                    key={dateStr}
+                    className={cn(
+                      "flex-1 relative border-r border-border last:border-r-0",
+                      todayCol && "bg-primary/[0.02]"
+                    )}
+                    style={{ height: hours.length * 40 }}
+                  >
+                    {/* Celdas invisibles para eventos de ratón */}
+                    {hours.map(hour => {
+                      const isSelected = isCellSelected(day, hour);
+                      return (
+                        <div
+                          key={hour}
+                          className={cn(
+                            "absolute w-full h-[40px] border-b border-border last:border-b-0 cursor-crosshair select-none",
+                            isSelected ? "bg-primary/20 ring-inset ring-1 ring-primary/40" : "hover:bg-primary/5"
+                          )}
+                          style={{ top: hour * 40 }}
+                          onMouseDown={() => handleMouseDown(day, hour)}
+                          onMouseEnter={() => handleMouseEnter(hour)}
+                          onMouseUp={handleMouseUp}
+                        />
+                      );
+                    })}
+
+                    {/* Bloques de agentes */}
+                    {blocks.map(block => {
+                      const colorClass = AGENT_COLOR_CLASSES[getAgentColor(block.agentName)] || AGENT_COLOR_CLASSES[COLOR_PALETTE[0]];
+                      const top = block.startHour * 40 + 2;
+                      const height = block.durationHours * 40 - 4;
+                      const leftPct = (block.lane / block.totalLanes) * 100;
+                      const widthPct = (1 / block.totalLanes) * 100;
+                      const timeLabel = `${String(block.startHour).padStart(2, '0')}:00–${String(block.endHour).padStart(2, '0')}:00`;
+                      return (
+                        <div
+                          key={`${block.agentName}-${block.startHour}`}
+                          className={cn("absolute rounded border z-10 overflow-hidden", colorClass)}
+                          style={{
+                            top,
+                            height,
+                            left: `calc(${leftPct}% + 2px)`,
+                            width: `calc(${widthPct}% - 4px)`,
+                          }}
+                          onMouseDown={e => e.stopPropagation()}
+                        >
+                          <div className="px-1.5 pt-1 pb-0.5 h-full flex flex-col">
+                            <div className="flex items-start justify-between gap-0.5">
+                              <span className="text-[10px] font-bold leading-tight truncate">
+                                {block.agentName.split(' ')[0]}
+                              </span>
+                              <button
+                                className="opacity-40 hover:opacity-100 transition-opacity flex-shrink-0"
+                                onClick={e => handleDeleteBlock(block.assignmentIds, e)}
+                              >
+                                <X size={9} />
+                              </button>
+                            </div>
+                            {height >= 24 && (
+                              <span className="text-[9px] opacity-65 leading-none mt-0.5 tabular-nums">
+                                {timeLabel}
+                              </span>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </ScrollArea>
