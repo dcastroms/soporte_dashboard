@@ -483,6 +483,41 @@ export async function syncSupportAssignmentToGoogle(assignmentId: string, calend
     }
 }
 
+export async function createGoogleCalendarEvent({
+    title,
+    date,
+    fromHour,
+    toHour,
+}: {
+    title: string;
+    date: string;       // yyyy-MM-dd
+    fromHour: number;   // 0-23
+    toHour: number;     // 1-24 (exclusive end)
+}) {
+    await requireAuth();
+    const settings = await getCalendarSettings();
+    const calendarId = settings?.targetCalendarId || 'primary';
+    const auth = await getGoogleAuthClient();
+    if (!auth) throw new Error('No hay cuenta de Google vinculada');
+
+    const calendar = google.calendar({ version: 'v3', auth });
+
+    const endHour = toHour === 24 ? 0 : toHour;
+    const endDate = toHour === 24
+        ? new Date(new Date(date + 'T00:00:00').getTime() + 86400000).toISOString().slice(0, 10)
+        : date;
+
+    const res = await calendar.events.insert({
+        calendarId,
+        requestBody: {
+            summary: title,
+            start: { dateTime: `${date}T${String(fromHour).padStart(2, '0')}:00:00`, timeZone: 'America/Bogota' },
+            end:   { dateTime: `${endDate}T${String(endHour).padStart(2, '0')}:00:00`, timeZone: 'America/Bogota' },
+        },
+    });
+    return res.data;
+}
+
 async function deleteFromGoogleCalendar(eventId: string) {
     const auth = await getGoogleAuthClient();
     if (!auth) return;

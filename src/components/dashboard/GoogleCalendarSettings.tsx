@@ -24,7 +24,8 @@ import {
     getGoogleCalendars,
     updateCalendarSettings,
     getCalendarSettings,
-    syncSupportAssignmentsBatch
+    syncSupportAssignmentsBatch,
+    createGoogleCalendarEvent,
 } from '@/lib/actions';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
@@ -43,6 +44,14 @@ export function GoogleCalendarSettings({ assignmentsInView, trigger }: { assignm
     const [isCustom, setIsCustom] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
+
+    // Crear evento
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const [newTitle, setNewTitle] = useState('');
+    const [newDate, setNewDate] = useState(todayStr);
+    const [newFrom, setNewFrom] = useState(9);
+    const [newTo, setNewTo] = useState(17);
+    const [isCreating, setIsCreating] = useState(false);
 
     useEffect(() => {
         loadSettings();
@@ -106,6 +115,21 @@ export function GoogleCalendarSettings({ assignmentsInView, trigger }: { assignm
             toast.error("Error durante la sincronización");
         } finally {
             setIsSyncing(false);
+        }
+    };
+
+    const handleCreateEvent = async () => {
+        if (!newTitle.trim()) { toast.error('El título es obligatorio'); return; }
+        if (newTo <= newFrom) { toast.error('La hora de fin debe ser mayor que la de inicio'); return; }
+        setIsCreating(true);
+        try {
+            await createGoogleCalendarEvent({ title: newTitle.trim(), date: newDate, fromHour: newFrom, toHour: newTo });
+            toast.success('Evento creado en Google Calendar');
+            setNewTitle('');
+        } catch {
+            toast.error('Error al crear el evento');
+        } finally {
+            setIsCreating(false);
         }
     };
 
@@ -226,6 +250,62 @@ export function GoogleCalendarSettings({ assignmentsInView, trigger }: { assignm
                         Este proceso puede tardar unos segundos.
                     </p>
                 </div>
+            </div>
+
+            {/* Crear evento directo */}
+            <div className="border border-border rounded-lg p-3 space-y-3">
+                <p className="text-xs font-bold text-foreground/70 flex items-center gap-1.5">
+                    <Plus size={13} /> Crear evento en calendario
+                </p>
+                <Input
+                    placeholder="Título del evento"
+                    value={newTitle}
+                    onChange={e => setNewTitle(e.target.value)}
+                    className="h-8 text-sm"
+                />
+                <input
+                    type="date"
+                    value={newDate}
+                    onChange={e => setNewDate(e.target.value)}
+                    className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                        <label className="text-[10px] text-muted-foreground block mb-1">Desde</label>
+                        <select
+                            value={newFrom}
+                            onChange={e => { const v = Number(e.target.value); setNewFrom(v); if (newTo <= v) setNewTo(v + 1); }}
+                            className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                        >
+                            {Array.from({ length: 24 }, (_, i) => (
+                                <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
+                            ))}
+                        </select>
+                    </div>
+                    <span className="text-muted-foreground mt-4">–</span>
+                    <div className="flex-1">
+                        <label className="text-[10px] text-muted-foreground block mb-1">Hasta</label>
+                        <select
+                            value={newTo}
+                            onChange={e => setNewTo(Number(e.target.value))}
+                            className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                        >
+                            {Array.from({ length: 24 }, (_, i) => i + 1).filter(i => i > newFrom).map(i => (
+                                <option key={i} value={i}>{String(i === 24 ? 0 : i).padStart(2, '0')}:00{i === 24 ? ' (+1d)' : ''}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <span className="text-[11px] text-muted-foreground mt-4 tabular-nums">{newTo - newFrom}h</span>
+                </div>
+                <Button
+                    size="sm"
+                    className="w-full text-xs gap-1.5"
+                    onClick={handleCreateEvent}
+                    disabled={isCreating || !isLinked || !newTitle.trim()}
+                >
+                    <Plus size={13} />
+                    {isCreating ? 'Creando...' : 'Crear evento'}
+                </Button>
             </div>
         </div>
     );
