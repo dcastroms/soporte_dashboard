@@ -121,6 +121,21 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
     return assignments.filter(a => a.date >= start && a.date <= end);
   }, [assignments, startDate]);
 
+  const weeklyStats = useMemo(() => {
+    const isNocturnal = (hour: number) => hour >= 21 || hour <= 5;
+    let extraHours = 0;
+    Object.values(weeklySummary).forEach(h => { extraHours += Math.max(0, h - OVERLOAD_HOURS); });
+    const nocturnalWeekday = weekAssignments.filter(a => {
+      const day = new Date(a.date + 'T12:00:00').getDay();
+      return day !== 0 && isNocturnal(a.hour);
+    }).length;
+    const nocturnalSunday = weekAssignments.filter(a => {
+      const day = new Date(a.date + 'T12:00:00').getDay();
+      return day === 0 && isNocturnal(a.hour);
+    }).length;
+    return { extraHours, nocturnalWeekday, nocturnalSunday };
+  }, [weekAssignments, weeklySummary]);
+
   const getAssignmentsForCell = (date: Date, hour: number) => {
     const dateStr = format(date, 'yyyy-MM-dd');
     return assignments.filter(a => a.date === dateStr && a.hour === hour);
@@ -399,9 +414,29 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
         </div>
       )}
 
+      {/* Contadores semanales */}
+      {weekAssignments.length > 0 && (
+        <div className="flex items-center gap-3 flex-shrink-0 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <span className="font-bold text-foreground/70">{weeklyStats.extraHours}</span>
+            <span>h extra</span>
+          </div>
+          <span className="text-border">·</span>
+          <div className="flex items-center gap-1">
+            <span className="font-bold text-foreground/70">{weeklyStats.nocturnalWeekday}</span>
+            <span>noct. Lun–Sáb</span>
+          </div>
+          <span className="text-border">·</span>
+          <div className="flex items-center gap-1">
+            <span className="font-bold text-foreground/70">{weeklyStats.nocturnalSunday}</span>
+            <span>noct. Dom</span>
+          </div>
+        </div>
+      )}
+
       {/* Grid — ocupa toda la altura restante */}
       <div className="flex-1 border border-border rounded-lg overflow-hidden bg-background min-h-0">
-        <ScrollArea className="h-[calc(100vh-148px)]">
+        <ScrollArea className="h-full">
           <div
             className="min-w-[700px]"
             onMouseLeave={() => { if (isSelecting) handleMouseUp(); }}
