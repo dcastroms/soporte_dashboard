@@ -15,7 +15,7 @@ import {
   Sheet, SheetContent, SheetTrigger,
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
-import { X, ChevronLeft, ChevronRight, SlidersHorizontal, Trash2, CalendarRange, ClipboardList, Calendar, Camera } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, SlidersHorizontal, Trash2, CalendarRange, ClipboardList, Calendar, Camera, CalendarPlus, LayoutGrid } from "lucide-react";
 import { format, addDays, startOfWeek, eachDayOfInterval, isSameDay, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { GoogleCalendarSettings } from './GoogleCalendarSettings';
@@ -27,6 +27,7 @@ import {
   deleteAssignmentsForWeek,
   getUsers,
   getSupportAssignments,
+  createGoogleCalendarEvent,
 } from '@/lib/actions';
 import { toast } from 'sonner';
 import { useSession } from "next-auth/react";
@@ -164,6 +165,12 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
   const [customAgent, setCustomAgent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
+  const [gridMode, setGridMode] = useState<'shifts' | 'events'>('shifts');
+
+  // Estado formulario crear evento GCal
+  const [isEventDialogOpen, setIsEventDialogOpen] = useState(false);
+  const [eventTitle, setEventTitle] = useState('');
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
 
   const [users, setUsers] = useState<Array<{ id: string; name: string | null; email: string }>>([]);
 
@@ -460,13 +467,38 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
       setSelectedCell({ date: selectionStart.date });
       setDialogFromHour(s);
       setDialogToHour(e + 1);
-      setSelectedAgents([]);
-      setCustomAgent('');
-      setIsDialogOpen(true);
+      if (gridMode === 'events') {
+        setEventTitle('');
+        setIsEventDialogOpen(true);
+      } else {
+        setSelectedAgents([]);
+        setCustomAgent('');
+        setIsDialogOpen(true);
+      }
     }
     setIsSelecting(false);
     setSelectionStart(null);
     setSelectionEnd(null);
+  };
+
+  const handleCreateEvent = async () => {
+    if (!selectedCell || !eventTitle.trim()) return;
+    setIsCreatingEvent(true);
+    try {
+      await createGoogleCalendarEvent({
+        title: eventTitle.trim(),
+        date: format(selectedCell.date, 'yyyy-MM-dd'),
+        fromHour: dialogFromHour,
+        toHour: dialogToHour,
+      });
+      toast.success('Evento creado en Google Calendar');
+      setIsEventDialogOpen(false);
+      setEventTitle('');
+    } catch {
+      toast.error('Error al crear el evento. Verifica que tu cuenta de Google esté vinculada.');
+    } finally {
+      setIsCreatingEvent(false);
+    }
   };
 
   const isCellSelected = (date: Date, hour: number) => {
@@ -542,6 +574,32 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
           <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => setCurrentDate(new Date())}>
             Hoy
           </Button>
+          <div className="flex items-center rounded-md border border-border overflow-hidden ml-2">
+            <button
+              onClick={() => setGridMode('shifts')}
+              title="Modo turnos"
+              className={cn(
+                "h-7 px-2 flex items-center gap-1 text-[11px] font-medium transition-colors",
+                gridMode === 'shifts'
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              )}
+            >
+              <LayoutGrid size={12} /> Turnos
+            </button>
+            <button
+              onClick={() => setGridMode('events')}
+              title="Modo crear evento de calendario"
+              className={cn(
+                "h-7 px-2 flex items-center gap-1 text-[11px] font-medium transition-colors border-l border-border",
+                gridMode === 'events'
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              )}
+            >
+              <CalendarPlus size={12} /> Evento GCal
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-1">
@@ -751,8 +809,11 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
                         <div
                           key={hour}
                           className={cn(
-                            "absolute w-full h-[40px] border-b border-border last:border-b-0 cursor-crosshair select-none",
-                            isSelected ? "bg-primary/20 ring-inset ring-1 ring-primary/40" : "hover:bg-primary/5"
+                            "absolute w-full h-[40px] border-b border-border last:border-b-0 select-none",
+                            gridMode === 'events' ? "cursor-cell" : "cursor-crosshair",
+                            isSelected
+                              ? gridMode === 'events' ? "bg-blue-500/20 ring-inset ring-1 ring-blue-500/40" : "bg-primary/20 ring-inset ring-1 ring-primary/40"
+                              : gridMode === 'events' ? "hover:bg-blue-500/5" : "hover:bg-primary/5"
                           )}
                           style={{ top: hour * 40 }}
                           onMouseDown={() => handleMouseDown(day, hour)}
@@ -830,6 +891,75 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Diálogo crear evento Google Calendar */}
+      <Dialog open={isEventDialogOpen} onOpenChange={open => { setIsEventDialogOpen(open); if (!open) setEventTitle(''); }}>
+        <DialogContent className="sm:max-w-[380px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarPlus size={16} className="text-primary" /> Crear evento en Google Calendar
+            </DialogTitle>
+            {selectedCell && (
+              <DialogDescription>
+                {format(selectedCell.date, "EEEE dd 'de' MMMM", { locale: es })}
+                {' · '}
+                <span className="font-mono tabular-nums">
+                  {String(dialogFromHour).padStart(2, '0')}:00 – {String(dialogToHour === 24 ? 0 : dialogToHour).padStart(2, '0')}:00
+                </span>
+                <span className="ml-1 text-muted-foreground">({dialogToHour - dialogFromHour}h)</span>
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          <div className="py-3 space-y-3">
+            <Input
+              placeholder="Título del evento"
+              value={eventTitle}
+              onChange={e => setEventTitle(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreateEvent()}
+              autoFocus
+              className="h-9"
+            />
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Desde</label>
+                <select
+                  value={dialogFromHour}
+                  onChange={e => { const v = Number(e.target.value); setDialogFromHour(v); if (dialogToHour <= v) setDialogToHour(v + 1); }}
+                  className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
+                  ))}
+                </select>
+              </div>
+              <span className="text-muted-foreground mt-5">–</span>
+              <div className="flex-1">
+                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Hasta</label>
+                <select
+                  value={dialogToHour}
+                  onChange={e => setDialogToHour(Number(e.target.value))}
+                  className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  {Array.from({ length: 24 }, (_, i) => i + 1).filter(i => i > dialogFromHour).map(i => (
+                    <option key={i} value={i}>{String(i === 24 ? 0 : i).padStart(2, '0')}:00{i === 24 ? ' (+1d)' : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <span className="text-[11px] text-muted-foreground mt-5 tabular-nums">{dialogToHour - dialogFromHour}h</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setIsEventDialogOpen(false)}>Cancelar</Button>
+            <Button
+              size="sm"
+              onClick={handleCreateEvent}
+              disabled={isCreatingEvent || !eventTitle.trim()}
+            >
+              {isCreatingEvent ? 'Creando...' : 'Crear evento'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Diálogo asignación */}
       <Dialog
