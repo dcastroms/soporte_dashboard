@@ -532,14 +532,13 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
                       return (
                         <div
                           key={`${block.agentName}-${block.startHour}`}
-                          className={cn("absolute rounded border z-10 overflow-hidden", colorClass)}
+                          className={cn("absolute rounded border z-10 overflow-hidden pointer-events-none", colorClass)}
                           style={{
                             top,
                             height,
                             left: `calc(${leftPct}% + 2px)`,
                             width: `calc(${widthPct}% - 4px)`,
                           }}
-                          onMouseDown={e => e.stopPropagation()}
                         >
                           <div className="px-1.5 pt-1 pb-0.5 h-full flex flex-col">
                             <div className="flex items-start justify-between gap-0.5">
@@ -547,7 +546,7 @@ export function ShiftCalendar({ initialAssignments }: ShiftCalendarProps) {
                                 {block.agentName.split(' ')[0]}
                               </span>
                               <button
-                                className="opacity-40 hover:opacity-100 transition-opacity flex-shrink-0"
+                                className="opacity-40 hover:opacity-100 transition-opacity flex-shrink-0 pointer-events-auto"
                                 onClick={e => handleDeleteBlock(block.assignmentIds, e)}
                               >
                                 <X size={9} />
