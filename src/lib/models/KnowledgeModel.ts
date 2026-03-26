@@ -61,3 +61,11 @@ export async function findAllChunks(): Promise<KnowledgeChunkDoc[]> {
 export async function findChunksByDocIds(docIds: string[]): Promise<KnowledgeChunkDoc[]> {
   return queryProxy({ collection: "KnowledgeChunk", operation: "find", filter: { docId: { $in: docIds } } });
 }
+
+export async function countKnowledgeDocs(): Promise<number> {
+  return queryProxy({ collection: "KnowledgeDoc", operation: "countDocuments" });
+}
+
+export async function countKnowledgeChunks(): Promise<number> {
+  return queryProxy({ collection: "KnowledgeChunk", operation: "countDocuments" });
+}

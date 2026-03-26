@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { findMetrics } from "@/lib/models/IntercomModel";
 import { WeeklyHealth } from "@/components/dashboard/WeeklyHealth";
 import { Activity } from "lucide-react";
 
@@ -6,10 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function TrackingPage() {
     // Fetch last 60 days of Intercom metrics for WoW comparison
-    const raw = await prisma.intercomMetric.findMany({
-        orderBy: { date: "asc" },
-        take: 60,
-    });
+    const raw = await findMetrics({}, { sort: { date: 1 }, limit: 60 });
 
     const mid = Math.floor(raw.length / 2);
     const current = raw.slice(mid);

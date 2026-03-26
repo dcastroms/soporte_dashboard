@@ -5,7 +5,9 @@ import {
   CardHeader,
   CardTitle
 } from "@/components/ui/card";
-import { prisma } from "@/lib/prisma";
+import { findSyncStatusFirst } from "@/lib/models/IntercomModel";
+import { findEvents } from "@/lib/models/SupportModel";
+import { countKnowledgeDocs, countKnowledgeChunks } from "@/lib/models/KnowledgeModel";
 import { formatSeconds } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
@@ -91,18 +93,15 @@ export default async function OverviewPage({
     getIntercomLeaderboard(),
     getIntercomTrendData(range),
     import('@/lib/intercom').then(mod => mod.getIntercomMetrics()),
-    prisma.intercomSyncStatus.findFirst({ orderBy: { lastSync: 'desc' } }),
+    findSyncStatusFirst({}, { sort: { lastSync: -1 } }),
     safe(() => getRedFlagTickets(), []),
     safe(() => getTicketTypeInsights(), []),
     safe(() => getReopenRate(), { rate: 0, isAlert: false }),
     safe(() => getCriticalAccounts(), []),
     safe(() => getWeeklyEfficiency(), { received: 0, solved: 0, efficiency: 0 }),
-    prisma.event.findMany({
-      where: { startDate: { lte: todayEnd }, endDate: { gte: todayStart } },
-      orderBy: { startDate: 'asc' },
-    }),
-    prisma.knowledgeDoc.count().catch(() => 0),
-    prisma.knowledgeChunk.count().catch(() => 0),
+    findEvents({ startDate: { $lte: todayEnd.toISOString() }, endDate: { $gte: todayStart.toISOString() } }, { sort: { startDate: 1 } }),
+    countKnowledgeDocs().catch(() => 0),
+    countKnowledgeChunks().catch(() => 0),
   ]);
   // Compute ambient glow class based on active event type (server-side)
   const glowStyles: Record<string, string> = {

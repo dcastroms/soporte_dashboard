@@ -408,7 +408,7 @@ export async function getTrendMetrics(days: number = 7) {
 
   return {
     chartData: [...metrics].slice(0, days).reverse().map(m => ({
-      date: m.date.toISOString().split('T')[0],
+      date: new Date(m.date).toISOString().split('T')[0],
       volume: m.totalVolume,
       csat: m.csatAverage || 0,
       frt: m.avgFirstResponseTime || 0

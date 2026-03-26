@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar as CalendarIcon, Plus, Bell, Megaphone, Wrench, Rocket, ExternalLink, Tv, Trophy as TrophyIcon } from "lucide-react";
 import { format, isSameDay, isWithinInterval, addDays } from "date-fns";
 import { es } from "date-fns/locale";
-import { createEvent, getEvents, deleteEvent } from "@/lib/actions";
+import { createEventAction as createEvent, getEvents, deleteEventAction as deleteEvent } from "@/lib/actions";
 import { toast } from "sonner";
 import Link from "next/link";
 

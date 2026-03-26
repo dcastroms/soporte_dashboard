@@ -33,8 +33,25 @@ export interface MongoQueryPayload {
 }
 
 export async function queryProxy<T = any>(payload: MongoQueryPayload): Promise<T> {
+  const proxyUrl = getProxyName();
+
+  // Local dev: si DATABASE_PROXY_URL es una URL HTTP, llama al proxy local
+  if (proxyUrl.startsWith("http://") || proxyUrl.startsWith("https://")) {
+    const res = await fetch(proxyUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const response = await res.json();
+    if (!response.success) {
+      throw new Error(response.reason || "MongoDB proxy query failed");
+    }
+    return response.result as T;
+  }
+
+  // Producción: invocar Lambda por nombre
   const cmd = new InvokeCommand({
-    FunctionName: getProxyName(),
+    FunctionName: proxyUrl,
     InvocationType: "RequestResponse",
     Payload: Buffer.from(JSON.stringify(payload)),
   });

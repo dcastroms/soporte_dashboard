@@ -136,6 +136,10 @@ export async function insertManyAgents(docs: Omit<IntercomAgentDoc, "id">[]): Pr
 
 // ── IntercomSyncStatus ────────────────────────────────────────────────────────
 
+export async function findSyncStatusFirst(filter: Record<string, any> = {}, options: Record<string, any> = {}): Promise<{ lastSync: string } | null> {
+  return queryProxy({ collection: "IntercomSyncStatus", operation: "findOne", filter, options });
+}
+
 export async function createSyncStatus(): Promise<void> {
   await queryProxy({
     collection: "IntercomSyncStatus",
