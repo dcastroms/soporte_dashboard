@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { findKnowledgeDocs, createKnowledgeDoc } from "@/lib/models/KnowledgeModel";
 import { chunkText } from "@/lib/chunker";
 import { embed } from "@/lib/embeddings";
 import { writeFile } from "fs/promises";
@@ -16,10 +16,7 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const docs = await prisma.knowledgeDoc.findMany({
-    select: { id: true, title: true, uploadedBy: true, createdAt: true, docType: true, imageUrl: true },
-    orderBy: { createdAt: "desc" },
-  });
+  const docs = await findKnowledgeDocs();
 
   return NextResponse.json(docs);
 }
@@ -143,17 +140,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  const doc = await prisma.knowledgeDoc.create({
-    data: {
+  const doc = await createKnowledgeDoc(
+    {
       title,
       content: content.trim(),
       docType,
       imageUrl: imageUrl ?? null,
       uploadedBy: session.user.name || session.user.email,
-      chunks: { create: chunksWithEmbeddings },
     },
-    select: { id: true, title: true, createdAt: true, docType: true },
-  });
+    chunksWithEmbeddings
+  );
 
   return NextResponse.json({ doc, chunkCount: chunksWithEmbeddings.length }, { status: 201 });
 }

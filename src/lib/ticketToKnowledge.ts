@@ -1,5 +1,5 @@
 // src/lib/ticketToKnowledge.ts
-import { prisma } from "@/lib/prisma";
+import { findKnowledgeDocFirst, createKnowledgeDoc } from "@/lib/models/KnowledgeModel";
 import { chat } from "@/lib/aiProvider";
 import { chunkText } from "@/lib/chunker";
 import { embed } from "@/lib/embeddings";
@@ -144,10 +144,7 @@ export async function saveArticleToDB(
     uploadedBy: string;
   }
 ) {
-  const existing = await prisma.knowledgeDoc.findFirst({
-    where: { sourceId: options.conversationId },
-    select: { id: true },
-  });
+  const existing = await findKnowledgeDocFirst({ sourceId: options.conversationId });
   if (existing) return { skipped: true, docId: existing.id };
 
   const content = formatArticleContent(draft);
@@ -171,8 +168,8 @@ export async function saveArticleToDB(
     }));
   }
 
-  const doc = await prisma.knowledgeDoc.create({
-    data: {
+  const doc = await createKnowledgeDoc(
+    {
       title: draft.titulo,
       content,
       docType: "text",
@@ -180,10 +177,9 @@ export async function saveArticleToDB(
       sourceType: "ticket",
       sourceId: options.conversationId,
       category: draft.categoria,
-      chunks: { create: chunksWithEmbeddings },
     },
-    select: { id: true, title: true, createdAt: true },
-  });
+    chunksWithEmbeddings
+  );
 
   return { skipped: false, docId: doc.id, doc };
 }

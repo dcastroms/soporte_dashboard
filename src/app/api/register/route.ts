@@ -6,26 +6,16 @@ export async function POST(req: Request) {
       return Response.json({ error: "Solo se permiten correos de @mediastre.am" }, { status: 400 });
     }
 
-    const { prisma } = await import("@/lib/prisma");
+    const { findUserByEmail, createUser } = await import("@/lib/models/UserModel");
     const bcrypt = await import("bcryptjs");
 
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
-
+    const existingUser = await findUserByEmail(email);
     if (existingUser) {
       return Response.json({ error: "El usuario ya existe" }, { status: 400 });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-      },
-    });
+    const user = await createUser({ name, email, password: hashedPassword, role: "USER", permissions: [] });
 
     return Response.json({ message: "Usuario creado con éxito", user: { email: user.email, name: user.name } });
   } catch (error) {

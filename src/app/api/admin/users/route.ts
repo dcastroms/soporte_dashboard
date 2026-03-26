@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import { findAllUsers, updateUser } from "@/lib/models/UserModel";
 
 export async function GET(req: NextRequest) {
     try {
@@ -10,17 +10,7 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
         }
 
-        const users = await prisma.user.findMany({
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                permissions: true,
-                createdAt: true,
-            },
-            orderBy: { createdAt: 'desc' }
-        });
+        const users = await findAllUsers({ orderBy: { createdAt: -1 } });
 
         return NextResponse.json(users);
     } catch (error) {
@@ -49,11 +39,7 @@ export async function PATCH(req: NextRequest) {
             return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 });
         }
 
-        const updatedUser = await prisma.user.update({
-            where: { id: userId },
-            data,
-            select: { id: true, role: true, permissions: true },
-        });
+        const updatedUser = await updateUser(userId, data);
 
         return NextResponse.json(updatedUser);
     } catch (error) {

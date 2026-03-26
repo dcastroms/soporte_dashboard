@@ -5,7 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { chat } from "@/lib/aiProvider";
 import { buildSuggestMessages } from "@/lib/supportPrompt";
 import { embedQuery, findTopChunks } from "@/lib/embeddings";
-import { prisma } from "@/lib/prisma";
+import { findAllChunks } from "@/lib/models/KnowledgeModel";
+import { findAiConfigByKey, createSuggestionLog } from "@/lib/models/AiModel";
 import { checkRateLimit } from "@/lib/rateLimit";
 
 interface ConversationMessage {
@@ -50,9 +51,7 @@ export async function POST(req: NextRequest) {
       (m) => m.role === "user" && m.content.length > 10 && !m.content.includes("te llegarán") && !m.content.includes("correo electrónico")
     );
     if (lastUserMsg) {
-      const allChunks = await prisma.knowledgeChunk.findMany({
-        select: { text: true, embedding: true },
-      });
+      const allChunks = await findAllChunks();
 
       if (allChunks.length > 0) {
         const queryEmbedding = await embedQuery(lastUserMsg.content);
@@ -69,21 +68,18 @@ export async function POST(req: NextRequest) {
   }
 
   // Load custom system prompt if set
-  const configRow = await prisma.aiConfig.findUnique({ where: { key: "systemPrompt" } }).catch(() => null);
+  const configRow = await findAiConfigByKey("systemPrompt").catch(() => null);
   const customSystemPrompt = configRow?.value;
 
   try {
     const aiMessages = buildSuggestMessages(messages, knowledgeContext, customSystemPrompt);
     const result = await chat(aiMessages);
 
-    // A.9: Log suggestion for feedback tracking
-    const log = await prisma.aiSuggestionLog.create({
-      data: {
-        conversationId,
-        suggestion: result.text,
-        agentEmail: session.user.email,
-        usedKnowledge: !!knowledgeContext,
-      },
+    const log = await createSuggestionLog({
+      conversationId,
+      suggestion: result.text,
+      agentEmail: session.user.email,
+      usedKnowledge: !!knowledgeContext,
     });
 
     return NextResponse.json({

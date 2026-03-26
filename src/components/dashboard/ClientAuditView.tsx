@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 import {
     ArrowLeft, ExternalLink, Clock, Bug, AlertOctagon,
     Target, BarChart2, Activity, History, Plus,
-    TrendingUp, TrendingDown, Users, Zap
+    TrendingUp, TrendingDown
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { TicketSummaryPopover } from "@/components/dashboard/TicketSummaryPopover";
 import {
     BarChart, Bar, ResponsiveContainer, Tooltip as RechartsTooltip,
     XAxis, YAxis
@@ -106,28 +107,7 @@ function TicketRow({ ticket }: { ticket: AuditTicket }) {
                         {ticket.priority.toUpperCase()}
                     </Badge>
                 )}
-                <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6 text-muted-foreground hover:text-[#9E77E5] hover:bg-[#9E77E5]/10"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        toast.info("Reasignar ticket (Mock)", { description: "Conectando con Intercom..." });
-                    }}
-                >
-                    <Users size={10} />
-                </Button>
-                <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        toast.info("Cerrar ticket (Mock)", { description: "Conectando con Intercom..." });
-                    }}
-                >
-                    <Zap size={10} />
-                </Button>
+                <TicketSummaryPopover conversationId={ticket.intercomId} />
                 <a href={ticket.intercomUrl} target="_blank" rel="noopener noreferrer"
                     className="text-[#9E77E5] hover:opacity-70 transition-opacity">
                     <ExternalLink size={11} />

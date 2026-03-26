@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { chat } from "@/lib/aiProvider";
 import { buildSuggestMessages } from "@/lib/supportPrompt";
 import { embedQuery, findTopChunksScored } from "@/lib/embeddings";
-import { prisma } from "@/lib/prisma";
+import { findAllChunks } from "@/lib/models/KnowledgeModel";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -14,9 +14,7 @@ export async function POST(req: NextRequest) {
   if (!query) return NextResponse.json({ error: "query requerido" }, { status: 400 });
 
   // RAG
-  const allChunks = await prisma.knowledgeChunk.findMany({
-    select: { text: true, embedding: true },
-  });
+  const allChunks = await findAllChunks();
 
   const queryEmbedding = await embedQuery(query);
   const topScored = findTopChunksScored(queryEmbedding, allChunks, 8);

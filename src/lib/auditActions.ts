@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { findConversations, countConversations, findCategoryMetrics } from "@/lib/models/IntercomModel";
 
 const INTERCOM_APP_ID = process.env.INTERCOM_APP_ID || "here";
 
@@ -36,27 +36,15 @@ const VIP_KEYWORDS = ["elecciones", "copa", "partido", "evento", "critical", "p1
 export async function getRedFlagTickets(): Promise<RedFlagTicket[]> {
   const cutoff = new Date(Date.now() - STALE_THRESHOLD_MS);
 
-  const stale = await prisma.intercomConversation.findMany({
-    where: {
-      status: { in: ["open", "snoozed"] },
-      updatedAt: { lt: cutoff },
-      intercomId: { not: "" },
-    },
-    orderBy: { updatedAt: "asc" },
-    take: 20,
-  });
+  const stale = await findConversations(
+    { status: { $in: ["open", "snoozed"] }, updatedAt: { $lt: cutoff.toISOString() }, intercomId: { $ne: "" } },
+    { sort: { updatedAt: 1 }, limit: 20 }
+  );
 
-  // Also grab high-priority open tickets even if recently updated
-  const highPriority = await prisma.intercomConversation.findMany({
-    where: {
-      status: { in: ["open", "snoozed"] },
-      priority: { in: ["high", "urgent"] },
-      updatedAt: { gte: cutoff },
-      intercomId: { not: "" },
-    },
-    orderBy: { updatedAt: "asc" },
-    take: 10,
-  });
+  const highPriority = await findConversations(
+    { status: { $in: ["open", "snoozed"] }, priority: { $in: ["high", "urgent"] }, updatedAt: { $gte: cutoff.toISOString() }, intercomId: { $ne: "" } },
+    { sort: { updatedAt: 1 }, limit: 10 }
+  );
 
   const seen = new Set<string>();
   const combined = [...stale, ...highPriority].filter(t => {
@@ -66,7 +54,7 @@ export async function getRedFlagTickets(): Promise<RedFlagTicket[]> {
   });
 
   return combined.map(t => {
-    const staleMs = Date.now() - t.updatedAt.getTime();
+    const staleMs = Date.now() - new Date(t.updatedAt).getTime();
     const staleHours = parseFloat((staleMs / 3600000).toFixed(1));
     const subjectLower = (t.subject ?? "").toLowerCase();
     const isVip =
@@ -103,16 +91,8 @@ export async function getTicketTypeInsights(): Promise<TicketTypeInsight[]> {
   const ignore = (v: string) => IGNORED.has(v.trim().toLowerCase());
 
   const [rawTypes, rawModules] = await Promise.all([
-    prisma.intercomCategoryMetric.findMany({
-      where: { category: "Type" },
-      orderBy: { count: "desc" },
-      take: 20,
-    }),
-    prisma.intercomCategoryMetric.findMany({
-      where: { category: "Module" },
-      orderBy: { count: "desc" },
-      take: 20,
-    }),
+    findCategoryMetrics({ category: "Type" }),
+    findCategoryMetrics({ category: "Module" }),
   ]);
 
   const typeMetrics = rawTypes.filter(m => !ignore(m.value));
@@ -145,14 +125,8 @@ export async function getTicketTypeInsights(): Promise<TicketTypeInsight[]> {
  */
 export async function getReopenRate(): Promise<{ rate: number; isAlert: boolean }> {
   const [total, reopened] = await Promise.all([
-    prisma.intercomConversation.count(),
-    // Proxy: open tickets that are older than 1 day (likely re-opened after closure)
-    prisma.intercomConversation.count({
-      where: {
-        status: "open",
-        createdAt: { lt: new Date(Date.now() - 86400000) },
-      },
-    }),
+    countConversations(),
+    countConversations({ status: "open", createdAt: { $lt: new Date(Date.now() - 86400000).toISOString() } }),
   ]);
 
   const rate = total > 0 ? parseFloat(((reopened / total) * 100).toFixed(1)) : 0;

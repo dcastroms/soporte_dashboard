@@ -14,6 +14,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { KnowledgeFromTicketDialog } from "@/components/knowledge/KnowledgeFromTicketDialog";
+import { ConversationSummary } from "@/components/chat/ConversationSummary";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -170,6 +171,8 @@ export function ConversationThread({ conversationId }: Props) {
           </div>
         </div>
       )}
+
+      {conversationId && <ConversationSummary key={conversationId} conversationId={conversationId} />}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

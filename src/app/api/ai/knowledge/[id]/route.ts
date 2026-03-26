@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { deleteKnowledgeDoc } from "@/lib/models/KnowledgeModel";
 
 export async function DELETE(
   _req: NextRequest,
@@ -14,7 +14,7 @@ export async function DELETE(
   const { id } = await params;
 
   try {
-    await prisma.knowledgeDoc.delete({ where: { id } });
+    await deleteKnowledgeDoc(id);
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: "Document not found" }, { status: 404 });

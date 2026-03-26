@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { updateSuggestionFeedback } from "@/lib/models/AiModel";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -12,10 +12,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "logId and accepted (boolean) are required" }, { status: 400 });
   }
 
-  await prisma.aiSuggestionLog.update({
-    where: { id: logId },
-    data: { accepted },
-  });
+  await updateSuggestionFeedback(logId, accepted);
 
   return NextResponse.json({ ok: true });
 }

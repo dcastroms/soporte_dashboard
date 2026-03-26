@@ -1,7 +1,28 @@
 "use server";
 
-import { prisma } from "./prisma";
 import { revalidatePath } from "next/cache";
+import {
+  deleteAllConversations, deleteAllMetrics, deleteAllCategoryMetrics,
+  deleteAllAgents, deleteAllHeatmap,
+  insertManyConversations, insertManyMetrics, insertManyCategoryMetrics,
+  insertManyAgents, insertManyHeatmap, createSyncStatus,
+  findConversations, findMetrics, findHeatmap, findAgents, findCategoryMetrics,
+  countConversations,
+} from "@/lib/models/IntercomModel";
+import { stripHtml } from "./utils";
+
+/** Extrae subject limpio: primero del subject, si no del body truncado */
+function extractSubject(subject?: string | null, body?: string | null): string {
+  if (subject) {
+    const clean = stripHtml(subject);
+    if (clean) return clean;
+  }
+  if (body) {
+    const clean = stripHtml(body);
+    if (clean) return clean.slice(0, 80) + (clean.length > 80 ? "…" : "");
+  }
+  return "Sin asunto";
+}
 
 const INTERCOM_TOKEN = process.env.INTERCOM_TOKEN;
 const INTERCOM_API_URL = "https://api.intercom.io";
@@ -153,7 +174,7 @@ export async function syncIntercomData(force = false) {
 
       return {
         intercomId: String(conv.id),
-        subject: conv.source?.subject || "Sin asunto",
+        subject: extractSubject(conv.source?.subject, conv.source?.body),
         status: conv.state,
         createdAt,
         updatedAt,
@@ -193,36 +214,32 @@ export async function syncIntercomData(force = false) {
       });
     });
 
-    const agentsInsert = Object.entries(agentStats).map(([id, s]) => ({
-      intercomId: id,
-      name: adminMap[id] || `Agente ${id}`,
-      totalSolved: s.totalSolved,
-      avgResponseTime: s.rtCount > 0 ? s.totalRT / s.rtCount : null,
-      csatScore: s.csatCount > 0 ? parseFloat((s.totalCSAT / s.csatCount).toFixed(2)) : null
-    }));
-
-    await prisma.$transaction(async (tx) => {
-      // Borrar todo primero (dentro de la transacción — si algo falla, se revierte)
-      await tx.intercomConversation.deleteMany({});
-      await tx.intercomMetric.deleteMany({});
-      await tx.intercomCategoryMetric.deleteMany({});
-      await tx.intercomAgent.deleteMany({});
-      await tx.intercomHeatmap.deleteMany({});
-
-      // Insertar datos nuevos
-      await tx.intercomConversation.createMany({ data: conversationsToSave });
-      await tx.intercomHeatmap.createMany({ data: heatmapInsert });
-      if (metricsInsert.length > 0) {
-        await tx.intercomMetric.createMany({ data: metricsInsert });
-      }
-      if (categoryInsert.length > 0) {
-        await tx.intercomCategoryMetric.createMany({ data: categoryInsert });
-      }
-      if (agentsInsert.length > 0) {
-        await tx.intercomAgent.createMany({ data: agentsInsert });
-      }
-      await tx.intercomSyncStatus.create({ data: { lastSync: new Date() } });
+    // Usar adminMap como base para incluir TODOS los agentes,
+    // incluso los que no tuvieron tickets asignados en el período
+    const agentsInsert = Object.entries(adminMap).map(([id, name]) => {
+      const s = agentStats[id] ?? { totalSolved: 0, totalRT: 0, rtCount: 0, totalCSAT: 0, csatCount: 0 };
+      return {
+        intercomId: id,
+        name,
+        totalSolved: s.totalSolved,
+        avgResponseTime: s.rtCount > 0 ? s.totalRT / s.rtCount : null,
+        csatScore: s.csatCount > 0 ? parseFloat((s.totalCSAT / s.csatCount).toFixed(2)) : null,
+      };
     });
+
+    // Borrar colecciones y reinsertar (sin transacción — MongoDB Atlas replica set requerido para $transaction)
+    await deleteAllConversations();
+    await deleteAllMetrics();
+    await deleteAllCategoryMetrics();
+    await deleteAllAgents();
+    await deleteAllHeatmap();
+
+    await insertManyConversations(conversationsToSave);
+    await insertManyHeatmap(heatmapInsert);
+    await insertManyMetrics(metricsInsert);
+    await insertManyCategoryMetrics(categoryInsert);
+    await insertManyAgents(agentsInsert);
+    await createSyncStatus();
 
     revalidatePath('/reports');
     revalidatePath('/');
@@ -235,10 +252,9 @@ export async function syncIntercomData(force = false) {
 }
 
 async function generateMockIntercomData() {
-  // Limpiar antes de generar mock
-  await prisma.intercomMetric.deleteMany({});
-  await prisma.intercomHeatmap.deleteMany({});
-  await prisma.intercomAgent.deleteMany({});
+  await deleteAllMetrics();
+  await deleteAllHeatmap();
+  await deleteAllAgents();
 
   const metrics = [];
   for (let i = 29; i >= 0; i--) {
@@ -256,7 +272,7 @@ async function generateMockIntercomData() {
     });
   }
 
-  await prisma.intercomMetric.createMany({ data: metrics });
+  await insertManyMetrics(metrics);
 
   const heatmapData = [];
   for (let day = 0; day < 7; day++) {
@@ -268,7 +284,7 @@ async function generateMockIntercomData() {
       heatmapData.push({ dayOfWeek: day, hour: hour, count: base });
     }
   }
-  await prisma.intercomHeatmap.createMany({ data: heatmapData });
+  await insertManyHeatmap(heatmapData);
 
   const agents = [
     { name: "Andrés Castro", id: "agent_1" },
@@ -285,7 +301,7 @@ async function generateMockIntercomData() {
     csatScore: parseFloat((Math.random() * 0.8 + 4.2).toFixed(2))
   }));
 
-  await prisma.intercomAgent.createMany({ data: finalAgents });
+  await insertManyAgents(finalAgents);
 
   revalidatePath('/reports');
   revalidatePath('/');
@@ -293,12 +309,8 @@ async function generateMockIntercomData() {
 }
 
 export async function getIntercomMetrics(limit: number = 30, filters?: { agentId?: string; category?: string }) {
-  // If no filters, return pre-calculated global metrics
   if (!filters?.agentId && !filters?.category) {
-    const metrics = await prisma.intercomMetric.findMany({
-      orderBy: { date: 'desc' },
-      take: limit
-    });
+    const metrics = await findMetrics({}, { sort: { date: -1 }, limit });
     return metrics.reverse();
   }
 
@@ -329,16 +341,7 @@ export async function getIntercomMetrics(limit: number = 30, filters?: { agentId
     ];
   }
 
-  const conversations = await prisma.intercomConversation.findMany({
-    where: whereClause,
-    select: {
-      createdAt: true,
-      firstResponseTime: true,
-      status: true,
-      // We would need CSAT rating stored on conversation level for accurate avg
-      // Assuming we can derive basic volume stats
-    }
-  });
+  const conversations = await findConversations(whereClause);
 
   // Group by day
   const dailyMap: Record<string, any> = {};
@@ -380,10 +383,7 @@ export async function getIntercomMetrics(limit: number = 30, filters?: { agentId
 }
 
 export async function getTrendMetrics(days: number = 7) {
-  const metrics = await prisma.intercomMetric.findMany({
-    orderBy: { date: 'desc' },
-    take: days * 2
-  });
+  const metrics = await findMetrics({}, { sort: { date: -1 }, limit: days * 2 });
   
   const currentPeriod = metrics.slice(0, days);
   const previousPeriod = metrics.slice(days, days * 2);
@@ -422,21 +422,16 @@ export async function getTrendMetrics(days: number = 7) {
 }
 
 export async function getIntercomHeatmap() {
-  return await prisma.intercomHeatmap.findMany({
-    orderBy: [{ dayOfWeek: 'asc' }, { hour: 'asc' }]
-  });
+  const data = await findHeatmap();
+  return data.sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.hour - b.hour);
 }
 
 export async function getIntercomAgents() {
-  return await prisma.intercomAgent.findMany({
-    orderBy: { totalSolved: 'desc' }
-  });
+  return await findAgents({ sort: { totalSolved: -1 } });
 }
 
 export async function getIntercomCategoryMetrics() {
-  return await prisma.intercomCategoryMetric.findMany({
-    orderBy: { count: 'desc' }
-  });
+  return await findCategoryMetrics();
 }
 
 export async function getAgentDailyMetrics(agentName: string) {
@@ -466,17 +461,14 @@ export async function getAgentDailyMetrics(agentName: string) {
     const today = new Date();
     today.setHours(0,0,0,0);
     
-    const stats = await prisma.intercomConversation.aggregate({
-      where: {
-        teammateName: agentName,
-        updatedAt: { gte: today },
-        status: 'closed'
-      },
-      _count: true
+    const count = await countConversations({
+      teammateName: agentName,
+      updatedAt: { $gte: today.toISOString() },
+      status: "closed",
     });
 
     return {
-      volume: stats._count,
+      volume: count,
       firstResponseTime: 'N/A', // Difícil de calcular al vuelo sin historial
       csat: 'N/A' 
     };

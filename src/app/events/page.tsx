@@ -36,11 +36,11 @@ interface Event {
 }
 
 const EVENT_TYPES = {
-    'N3': { label: 'Evento N3 (Crítico)', icon: Megaphone, color: 'text-red-700 bg-red-100 border-red-200', dotClass: 'bg-red-600' },
-    'N2': { label: 'Evento N2 (Alto)', icon: Wrench, color: 'text-orange-700 bg-orange-100 border-orange-200', dotClass: 'bg-orange-500' },
-    'N1': { label: 'Evento N1 (Normal)', icon: Rocket, color: 'text-blue-700 bg-blue-100 border-blue-200', dotClass: 'bg-blue-600' },
-    'Diario': { label: 'Diario / Constante', icon: CalIcon, color: 'text-slate-700 bg-slate-100 border-slate-200', dotClass: 'bg-slate-600' },
-    'Other': { label: 'Otro', icon: Bell, color: 'text-gray-500 bg-gray-50 border-gray-200', dotClass: 'bg-gray-500' },
+    'N3': { label: 'Evento N3 (Crítico)', icon: Megaphone, color: 'text-red-700 bg-red-100 border-red-200 dark:text-red-300 dark:bg-red-950/50 dark:border-red-900', dotClass: 'bg-red-600' },
+    'N2': { label: 'Evento N2 (Alto)', icon: Wrench, color: 'text-orange-700 bg-orange-100 border-orange-200 dark:text-orange-300 dark:bg-orange-950/50 dark:border-orange-900', dotClass: 'bg-orange-500' },
+    'N1': { label: 'Evento N1 (Normal)', icon: Rocket, color: 'text-blue-700 bg-blue-100 border-blue-200 dark:text-blue-300 dark:bg-blue-950/50 dark:border-blue-900', dotClass: 'bg-blue-600' },
+    'Diario': { label: 'Diario / Constante', icon: CalIcon, color: 'text-slate-700 bg-slate-100 border-slate-200 dark:text-slate-300 dark:bg-slate-800/50 dark:border-slate-700', dotClass: 'bg-slate-600' },
+    'Other': { label: 'Otro', icon: Bell, color: 'text-gray-500 bg-gray-50 border-gray-200 dark:text-gray-400 dark:bg-gray-800/50 dark:border-gray-700', dotClass: 'bg-gray-500' },
 };
 
 export default function EventsPage() {
@@ -254,8 +254,8 @@ export default function EventsPage() {
             return isWithinInterval(d, { start, end });
         }),
     };
-    const modifiersStyles = {
-        hasEvent: { fontWeight: 'bold', color: '#2563eb', backgroundColor: '#eff6ff' },
+    const modifiersClassNames = {
+        hasEvent: 'font-bold text-primary',
     };
 
     const getGoogleCalendarUrl = (ev: Event) => {
@@ -290,11 +290,11 @@ export default function EventsPage() {
                                 locale={es}
                                 className="rounded-md border shadow-sm"
                                 classNames={{
-                                    day_selected: "bg-slate-900 text-white hover:bg-slate-800 focus:bg-slate-900",
-                                    day_today: "bg-slate-100 text-slate-900 font-bold",
+                                    day_selected: "bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary",
+                                    day_today: "bg-accent text-accent-foreground font-bold",
                                 }}
                                 modifiers={modifiers}
-                                modifiersStyles={modifiersStyles}
+                                modifiersClassNames={modifiersClassNames}
                             />
                         </CardContent>
                     </Card>
@@ -307,7 +307,7 @@ export default function EventsPage() {
                             {Object.entries(EVENT_TYPES).map(([key, style]) => (
                                 <div key={key} className="flex items-center gap-2 text-sm">
                                     <div className={`w-3 h-3 rounded-full ${style.dotClass}`} />
-                                    <span className="text-slate-600">{style.label}</span>
+                                    <span className="text-muted-foreground">{style.label}</span>
                                 </div>
                             ))}
                         </CardContent>
@@ -315,7 +315,7 @@ export default function EventsPage() {
                 </div>
 
                 {/* Main Timeline */}
-                <Card className="flex flex-col h-full bg-white shadow-sm border-slate-200 overflow-hidden">
+                <Card className="flex flex-col h-full bg-card shadow-sm border-border overflow-hidden">
                     <CardHeader className="border-b pb-4 shrink-0">
                         <div className="flex items-center justify-between">
                             <div>
@@ -344,16 +344,16 @@ export default function EventsPage() {
                             {Array.from({ length: 24 }).map((_, hour) => (
                                 <div
                                     key={hour}
-                                    className="absolute w-full flex items-start border-b border-slate-100"
+                                    className="absolute w-full flex items-start border-b border-border"
                                     style={{ top: `${hour * HOUR_PX}px`, height: `${HOUR_PX}px` }}
                                 >
                                     {/* Hour label */}
-                                    <div className="w-16 shrink-0 text-xs text-slate-400 py-2 border-r border-slate-100 text-right pr-3 bg-white z-10 font-mono">
+                                    <div className="w-16 shrink-0 text-xs text-muted-foreground py-2 border-r border-border text-right pr-3 bg-card z-10 font-mono">
                                         {String(hour).padStart(2, '0')}:00
                                     </div>
                                     {/* Drag target area */}
                                     <div
-                                        className="flex-1 h-full hover:bg-blue-50/30 transition-colors"
+                                        className="flex-1 h-full hover:bg-accent/30 transition-colors"
                                         onMouseDown={(e) => handleTimeMouseDown(hour, e)}
                                         onMouseEnter={() => handleTimeMouseEnter(hour)}
                                     />
@@ -366,7 +366,7 @@ export default function EventsPage() {
                                     className="absolute left-16 right-0 bg-blue-400/20 border-2 border-blue-400 rounded pointer-events-none z-20"
                                     style={{ top: `${selectionTop}px`, height: `${selectionHeight}px` }}
                                 >
-                                    <span className="absolute top-1 left-2 text-xs font-bold text-blue-700 pointer-events-none">
+                                    <span className="absolute top-1 left-2 text-xs font-bold text-blue-600 dark:text-blue-300 pointer-events-none">
                                         {String(Math.min(dragStartHour!, dragEndHour!)).padStart(2, '0')}:00 – {String(Math.min(dragStartHour!, dragEndHour!) + Math.abs(dragEndHour! - dragStartHour!) + 1).padStart(2, '0')}:00
                                     </span>
                                 </div>
@@ -393,7 +393,7 @@ export default function EventsPage() {
                                 return (
                                     <div
                                         key={event.id}
-                                        className={`absolute left-20 right-4 p-3 rounded-lg border shadow-sm hover:shadow-md transition-all cursor-pointer z-10 bg-white flex flex-col justify-center overflow-hidden ${style.color}`}
+                                        className={`absolute left-20 right-4 p-3 rounded-lg border shadow-sm hover:shadow-md transition-all cursor-pointer z-10 flex flex-col justify-center overflow-hidden ${style.color}`}
                                         style={{ top: `${top}px`, height: `${height}px` }}
                                         onClick={() => setViewEvent(event)}
                                     >
@@ -438,7 +438,7 @@ export default function EventsPage() {
                             <Badge variant="outline" className={viewEvent ? EVENT_TYPES[viewEvent.type as keyof typeof EVENT_TYPES]?.color : ''}>
                                 {viewEvent && EVENT_TYPES[viewEvent.type as keyof typeof EVENT_TYPES]?.label}
                             </Badge>
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-muted-foreground">
                                 {viewEvent && format(new Date(viewEvent.startDate), "PPP", { locale: es })}
                             </span>
                         </div>
@@ -446,8 +446,8 @@ export default function EventsPage() {
                     </DialogHeader>
 
                     <div className="space-y-4 py-4">
-                        <div className="flex items-center gap-3 text-sm text-slate-600">
-                            <div className="p-2 bg-slate-100 rounded-lg">
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                            <div className="p-2 bg-muted rounded-lg">
                                 <CalIcon size={18} />
                             </div>
                             <div>
@@ -459,7 +459,7 @@ export default function EventsPage() {
                         </div>
 
                         {viewEvent?.description && (
-                            <div className="flex items-start gap-3 text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border">
+                            <div className="flex items-start gap-3 text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border">
                                 <Bell size={16} className="mt-0.5" />
                                 <p>{viewEvent.description}</p>
                             </div>

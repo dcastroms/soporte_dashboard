@@ -6,10 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
     ShieldAlert, Clock, RefreshCw, ExternalLink,
-    AlertOctagon, Star, Zap, Users
+    AlertOctagon, Star, Zap
 } from "lucide-react";
 import { toast } from "sonner";
 import type { RedFlagTicket } from "@/lib/auditActions";
+import { TicketSummaryPopover } from "@/components/dashboard/TicketSummaryPopover";
 
 interface FocusAuditProps {
     initialTickets?: RedFlagTicket[];
@@ -147,28 +148,7 @@ export function FocusAudit({ initialTickets = [] }: FocusAuditProps) {
                                                     {t.priority.toUpperCase()}
                                                 </Badge>
                                             ) : null}
-                                            <Button
-                                                size="icon"
-                                                variant="ghost"
-                                                className="h-5 w-5 text-muted-foreground hover:text-[#9E77E5] hover:bg-[#9E77E5]/10"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    toast.info("Reasignar ticket (Mock)", { description: "Conectando con Intercom..." });
-                                                }}
-                                            >
-                                                <Users size={9} />
-                                            </Button>
-                                            <Button
-                                                size="icon"
-                                                variant="ghost"
-                                                className="h-5 w-5 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    toast.info("Cerrar ticket (Mock)", { description: "Conectando con Intercom..." });
-                                                }}
-                                            >
-                                                <Zap size={9} />
-                                            </Button>
+                                            <TicketSummaryPopover conversationId={t.id} />
                                             <a
                                                 href={t.intercomUrl}
                                                 target="_blank"

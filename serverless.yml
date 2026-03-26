@@ -1,0 +1,56 @@
+service: soporte-dashboard
+
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  timeout: 29
+  memorySize: 1536
+  architecture: x86_64
+  role: arn:aws:iam::934583553888:role/vms-base-role
+  environment:
+    NODE_ENV: production
+    CUSTOM_ENV: ${self:custom.customEnv}
+    DATABASE_PROXY_URL: ${env:DATABASE_PROXY_URL, 'soporte-mongodb-dev-proxy'}
+    NEXTAUTH_URL: ${env:NEXTAUTH_URL, ''}
+    NEXTAUTH_SECRET: ${env:NEXTAUTH_SECRET, ''}
+    GOOGLE_CLIENT_ID: ${env:GOOGLE_CLIENT_ID, ''}
+    GOOGLE_CLIENT_SECRET: ${env:GOOGLE_CLIENT_SECRET, ''}
+    INTERCOM_TOKEN: ${env:INTERCOM_TOKEN, ''}
+    INTERCOM_CLIENT_SECRET: ${env:INTERCOM_CLIENT_SECRET, ''}
+    INTERCOM_APP_ID: ${env:INTERCOM_APP_ID, ''}
+    SLACK_WEBHOOK_URL: ${env:SLACK_WEBHOOK_URL, ''}
+    CRON_SECRET: ${env:CRON_SECRET, ''}
+    AWS_SES_FROM_EMAIL: ${env:AWS_SES_FROM_EMAIL, ''}
+    AI_PROVIDER: ${env:AI_PROVIDER, ''}
+    OPENAI_API_KEY: ${env:OPENAI_API_KEY, ''}
+    ANTHROPIC_API_KEY: ${env:ANTHROPIC_API_KEY, ''}
+    OLLAMA_URL: ${env:OLLAMA_URL, ''}
+  httpApi:
+    payload: "2.0"
+  ecr:
+    images:
+      webimage:
+        path: ./
+        file: Dockerfile.lambda
+
+functions:
+  web:
+    image:
+      name: webimage
+    events:
+      - httpApi:
+          path: /
+          method: ANY
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+
+custom:
+  customEnv: ${self:custom.customEnvMap.${sls:stage}, 'development'}
+  customEnvMap:
+    prod: production
+    qa: qa
+    dev: development

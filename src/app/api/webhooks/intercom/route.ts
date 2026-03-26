@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { sseSubscribers, broadcast } from "@/lib/sseRegistry";
 import crypto from "crypto";
 

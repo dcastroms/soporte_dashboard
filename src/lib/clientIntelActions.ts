@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { findConversations, countConversations } from "@/lib/models/IntercomModel";
 
 // ─── Static region mapping for known Mediastream clients ─────────────────────
 const CLIENT_REGION: Record<string, { country: string; flag: string }> = {
@@ -90,20 +90,10 @@ function categorize(ticketType: string | null): "bug" | "escalacion" | "consulta
  * Returns per-client ticket breakdown grouped from the DB.
  */
 export async function getClientBreakdown(): Promise<ClientRow[]> {
-  const conversations = await prisma.intercomConversation.findMany({
-    where: {
-      client: { not: null },
-    },
-    select: {
-      client: true,
-      status: true,
-      ticketType: true,
-      createdAt: true,
-      updatedAt: true,
-      intercomId: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const conversations = await findConversations(
+    { client: { $ne: null } },
+    { sort: { createdAt: -1 } }
+  );
 
   const now = Date.now();
   const MAP = new Map<string, ClientRow>();
@@ -137,7 +127,7 @@ export async function getClientBreakdown(): Promise<ClientRow[]> {
     const isOpen = conv.status === "open" || conv.status === "snoozed";
     if (isOpen) {
       row.open++;
-      const ageDays = (now - conv.updatedAt.getTime()) / 86400000;
+      const ageDays = (now - new Date(conv.updatedAt).getTime()) / 86400000;
       if (ageDays >= 15) { row.stale15++; row.stale9++; }
       else if (ageDays >= 9) row.stale9++;
     } else {
@@ -149,8 +139,9 @@ export async function getClientBreakdown(): Promise<ClientRow[]> {
     if (cat === "bug" || cat === "escalacion") row.escalaciones++;
     if (cat === "consulta") row.consultas++;
 
-    if (!row.latestTicketDate || conv.createdAt > row.latestTicketDate) {
-      row.latestTicketDate = conv.createdAt;
+    const convCreatedAt = new Date(conv.createdAt);
+    if (!row.latestTicketDate || convCreatedAt > row.latestTicketDate) {
+      row.latestTicketDate = convCreatedAt;
       row.latestTicketId = conv.intercomId;
     }
   }
@@ -207,12 +198,8 @@ export async function getWeeklyEfficiency(): Promise<{ received: number; solved:
   weekStart.setHours(0, 0, 0, 0);
 
   const [received, solved] = await Promise.all([
-    prisma.intercomConversation.count({
-      where: { createdAt: { gte: weekStart } },
-    }),
-    prisma.intercomConversation.count({
-      where: { createdAt: { gte: weekStart }, status: "closed" },
-    }),
+    countConversations({ createdAt: { $gte: weekStart.toISOString() } }),
+    countConversations({ createdAt: { $gte: weekStart.toISOString() }, status: "closed" }),
   ]);
 
   const efficiency = received > 0 ? Math.round((solved / received) * 100) : 0;
@@ -313,24 +300,8 @@ export async function getClientAudit(slug: string): Promise<any | null> {
 
   // Fetch all conversations for this client (case-insensitive partial match)
   const [clientConvs, allConvs] = await Promise.all([
-    prisma.intercomConversation.findMany({
-      where: {
-        client: { contains: clientName, mode: "insensitive" },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    // Light global sample for average comparison
-    prisma.intercomConversation.findMany({
-      select: {
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-        firstResponseTime: true,
-      },
-      where: { client: { not: null } },
-      orderBy: { createdAt: "desc" },
-      take: 1000,
-    }),
+    findConversations({ client: { $regex: clientName, $options: "i" } }, { sort: { createdAt: -1 } }),
+    findConversations({ client: { $ne: null } }, { sort: { createdAt: -1 }, limit: 1000 }),
   ]);
 
   if (clientConvs.length === 0) return null;

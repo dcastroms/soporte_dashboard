@@ -1,8 +1,8 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { prisma } from "@/lib/prisma";
+import { MongoAdapter } from "@/lib/mongoAdapter";
+import { findUserByEmail, findUserById } from "@/lib/models/UserModel";
 import bcrypt from "bcryptjs";
 
 export const authOptions: NextAuthOptions = {
@@ -15,24 +15,15 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials.email.endsWith("@mediastre.am")) return null;
 
-        if (!credentials.email.endsWith('@mediastre.am')) return null;
-
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
-        });
-
+        const user = await findUserByEmail(credentials.email);
         if (!user || !user.password) return null;
 
         const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
-
         if (!isPasswordValid) return null;
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        };
+        return { id: user.id, email: user.email, name: user.name };
       }
     }),
     GoogleProvider({
@@ -47,7 +38,7 @@ export const authOptions: NextAuthOptions = {
       }
     })
   ],
-  adapter: PrismaAdapter(prisma),
+  adapter: MongoAdapter(),
   callbacks: {
     async session({ session, user, token }) {
       if (session.user) {
@@ -64,19 +55,30 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
     async jwt({ token, user }) {
+      const now = Math.floor(Date.now() / 1000);
+
       if (user) {
         token.id = user.id;
-        token.role = (user as any).role;
-        token.permissions = (user as any).permissions ?? [];
+        const freshUser = await findUserById(user.id);
+        token.role = freshUser?.role ?? "USER";
+        token.permissions = freshUser?.permissions ?? [];
+        (token as any).permissionsUpdatedAt = now;
+      } else if (token.sub) {
+        const lastUpdate = (token as any).permissionsUpdatedAt as number ?? 0;
+        if (now - lastUpdate > 300) {
+          const freshUser = await findUserById(token.sub);
+          if (freshUser) {
+            token.role = freshUser.role;
+            token.permissions = freshUser.permissions;
+            (token as any).permissionsUpdatedAt = now;
+          }
+        }
       }
       return token;
     },
-    async signIn({ user, account, profile }) {
-      // Restricción de dominio @mediastre.am
-      if (user.email && user.email.endsWith('@mediastre.am')) {
-        return true;
-      }
-      return false; // Bloquear si no es el dominio correcto
+    async signIn({ user }) {
+      if (user.email && user.email.endsWith("@mediastre.am")) return true;
+      return false;
     }
   },
   pages: {
